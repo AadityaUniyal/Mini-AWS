@@ -1,0 +1,28 @@
+# Maven artifacts
+target/
+*.class
+*.jar
+*.war
+*.ear
+
+# Runtime data
+minicloud-data/
+*.mv.db
+*.trace.db
+
+# IDEs
+.idea/
+*.iml
+.vscode/
+.classpath
+.project
+.settings/
+
+# Logs
+*.log
+logs/
+
+# MacOS junk
+.DS_Store
+
+# Documentation text files are NOT ignored intentionally

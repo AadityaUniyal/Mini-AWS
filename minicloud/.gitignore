@@ -1,0 +1,15 @@
+target/
+*.class
+*.jar
+*.war
+*.ear
+minicloud-data/
+*.mv.db
+*.trace.db
+.idea/
+*.iml
+.classpath
+.project
+.settings/
+*.log
+logs/
