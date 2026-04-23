@@ -20,7 +20,7 @@ public class OpenApiConfig {
                 .info(new Info()
                         .title("MiniCloud API")
                         .description("Self-hosted Java cloud service — AWS-equivalent REST API")
-                        .version("1.0.0")
+                        .version("v1.0")
                         .contact(new Contact()
                                 .name("MiniCloud Platform")
                                 .email("admin@minicloud.local")))

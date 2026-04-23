@@ -75,6 +75,9 @@ public class ComputeService {
         
         checkPermission(instance.getUserId(), "ec2:TerminateInstances", "arn:aws:ec2:*:*:instance/" + instanceId);
 
+        // Validate state transition using FSM
+        InstanceStateMachine.validateTransition(instance.getState(), InstanceState.TERMINATED);
+
         if (instance.getPid() != null) {
                 processManager.terminate(instance.getPid());
             }
@@ -93,9 +96,8 @@ public class ComputeService {
         
         checkPermission(instance.getUserId(), "ec2:StartInstances", "arn:aws:ec2:*:*:instance/" + instanceId);
         
-        if (instance.getState() != InstanceState.STOPPED) {
-            throw new RuntimeException("Instance is not stopped");
-        }
+        // Validate state transition using FSM
+        InstanceStateMachine.validateTransition(instance.getState(), InstanceState.RUNNING);
         
         instance.setState(InstanceState.RUNNING);
         instance.setLaunchedAt(LocalDateTime.now());
@@ -114,9 +116,8 @@ public class ComputeService {
 
         checkPermission(instance.getUserId(), "ec2:StopInstances", "arn:aws:ec2:*:*:instance/" + instanceId);
 
-        if (instance.getState() != InstanceState.RUNNING) {
-            throw new RuntimeException("Instance is not running");
-        }
+        // Validate state transition using FSM
+        InstanceStateMachine.validateTransition(instance.getState(), InstanceState.STOPPED);
 
         if (instance.getPid() != null) {
             processManager.terminate(instance.getPid());
