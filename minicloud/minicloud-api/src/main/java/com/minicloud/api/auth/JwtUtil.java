@@ -41,9 +41,12 @@ public class JwtUtil {
         return Keys.hmacShaKeyFor(keyBytes);
     }
 
-    public String generateToken(String username, String role) {
+    public String generateToken(String username, String role, String userId, String accountId, boolean rootUser) {
         Map<String, Object> claims = new HashMap<>();
         claims.put("role", role);
+        claims.put("userId", userId);
+        claims.put("accountId", accountId);
+        claims.put("rootUser", rootUser);
 
         return Jwts.builder()
                 .claims(claims)                                           // 0.12.x: claims(map)
@@ -79,6 +82,19 @@ public class JwtUtil {
 
     public String extractRole(String token) {
         return (String) getClaims(token).get("role");
+    }
+
+    public String extractUserId(String token) {
+        return (String) getClaims(token).get("userId");
+    }
+
+    public String extractAccountId(String token) {
+        return (String) getClaims(token).get("accountId");
+    }
+
+    public boolean extractIsRoot(String token) {
+        Object isRoot = getClaims(token).get("rootUser");
+        return isRoot != null && (boolean) isRoot;
     }
 
     public long getExpiryMs() {

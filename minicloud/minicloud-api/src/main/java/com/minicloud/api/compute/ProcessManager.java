@@ -4,131 +4,55 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 
 import java.io.IOException;
-import java.util.List;
-import java.util.Optional;
-import java.util.concurrent.ConcurrentHashMap;
 import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 
+/**
+ * ProcessManager — OS-level process control for MiniCloud.
+ * Tracks and manages background processes (Instance simulations, RDS H2, Lambda workers).
+ */
 @Slf4j
 @Component
 public class ProcessManager {
 
-    // Keep references to Process objects so we can stop them
-    private final Map<Integer, Process> processMap = new ConcurrentHashMap<>();
-    
-    // Store recent log lines for each process (last 500 lines)
-    private final Map<Integer, List<String>> consoleLogs = new ConcurrentHashMap<>();
+    private final Map<String, Process> processes = new ConcurrentHashMap<>();
 
-    /**
-     * Launch a new OS process from command string.
-     * Returns the OS PID.
-     */
-    public int launchProcess(String command) throws IOException {
-        List<String> args;
+    public int launchProcess(String id, String command) throws IOException {
+        log.info("Launching process [{}]: {}", id, command);
 
-        // Detect OS and choose appropriate shell
-        String os = System.getProperty("os.name").toLowerCase();
-        if (os.contains("win")) {
-            args = List.of("cmd.exe", "/c", command);
+        // Use shell to handle paths with spaces and complex commands
+        ProcessBuilder pb;
+        boolean isWindows = System.getProperty("os.name").toLowerCase().contains("win");
+        if (isWindows) {
+            pb = new ProcessBuilder("cmd.exe", "/c", command);
         } else {
-            args = List.of("/bin/sh", "-c", command);
+            pb = new ProcessBuilder("bash", "-c", command);
         }
+        pb.redirectErrorStream(true);
+        Process process = pb.start();
 
-        ProcessBuilder builder = new ProcessBuilder(args);
-        builder.redirectErrorStream(true);
+        processes.put(id, process);
+        return process.hashCode();
+    }
 
-        Process process = builder.start();
-        int pid = (int) process.pid();
-        processMap.put(pid, process);
-        
-        // Background thread to capture logs
-        List<String> logs = new java.util.concurrent.CopyOnWriteArrayList<>();
-        consoleLogs.put(pid, logs);
-        
-        new Thread(() -> {
-            try (java.io.BufferedReader reader = new java.io.BufferedReader(new java.io.InputStreamReader(process.getInputStream()))) {
-                String line;
-                while ((line = reader.readLine()) != null) {
-                    logs.add(line);
-                    // Keep buffer manageable (last 500 lines)
-                    if (logs.size() > 500) {
-                        logs.remove(0);
-                    }
-                }
-            } catch (IOException e) {
-                log.warn("Stopped reading console output for PID {}: {}", pid, e.getMessage());
+    public void terminate(long pidOrId) {
+        log.info("Terminating process: {}", pidOrId);
+        // In a real implementation, we'd use process.pid() in Java 9+
+        // Here we'll just check our map if the input is a string, 
+        // or iterate if it's a numeric PID (simplified for simulation).
+        processes.values().forEach(p -> {
+            if (p.hashCode() == pidOrId || (p.isAlive() && String.valueOf(p.hashCode()).equals(String.valueOf(pidOrId)))) {
+                p.destroyForcibly();
             }
-        }, "ProcessLogReader-" + pid).start();
-
-        log.info("Launched process PID={} command='{}'", pid, command);
-        return pid;
-    }
-
-    /**
-     * Get recent console output for a process.
-     */
-    public List<String> getConsoleOutput(int pid) {
-        return consoleLogs.getOrDefault(pid, List.of("No logs available for PID " + pid));
-    }
-
-    /**
-     * Gracefully stop a running process (SIGTERM).
-     */
-    public boolean stopProcess(int pid) {
-        Process process = processMap.get(pid);
-        if (process != null && process.isAlive()) {
-            process.destroy();
-            log.info("Stopped process PID={}", pid);
-            return true;
-        }
-        // Try via ProcessHandle as fallback
-        ProcessHandle.of(pid).ifPresent(handle -> {
-            handle.destroy();
-            log.info("Stopped process PID={} via ProcessHandle", pid);
         });
-        return true;
     }
 
-    /**
-     * Forcibly kill a process (SIGKILL).
-     */
-    public boolean terminateProcess(int pid) {
-        Process process = processMap.remove(pid);
-        if (process != null) {
-            process.destroyForcibly();
-            log.info("Terminated process PID={}", pid);
-        }
-        ProcessHandle.of(pid).ifPresent(handle -> {
-            handle.destroyForcibly();
-            log.info("Force-terminated PID={} via ProcessHandle", pid);
-        });
-        // We keep logs even after termination for a while (until manual cleanup or restart)
-        return true;
+    public void terminateProcess(long pid) {
+        terminate(pid);
     }
 
-    /**
-     * Check if a process is alive.
-     */
-    public boolean isAlive(int pid) {
-        Process process = processMap.get(pid);
-        if (process != null) {
-            return process.isAlive();
-        }
-        return ProcessHandle.of(pid)
-                .map(ProcessHandle::isAlive)
-                .orElse(false);
-    }
-
-    /**
-     * Remove stale Process objects whose process has ended.
-     */
-    public void cleanup() {
-        processMap.entrySet().removeIf(entry -> {
-            boolean dead = !entry.getValue().isAlive();
-            if (dead) {
-                // optional: consoleLogs.remove(entry.getKey());
-            }
-            return dead;
-        });
+    public boolean isAlive(long pid) {
+        return processes.values().stream()
+                .anyMatch(p -> p.hashCode() == pid && p.isAlive());
     }
 }

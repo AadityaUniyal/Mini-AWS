@@ -1,15 +1,17 @@
 package com.minicloud.api.compute;
 
-import com.minicloud.api.exception.ResourceNotFoundException;
-import com.minicloud.api.iam.User;
-import com.minicloud.api.iam.UserRepository;
-import com.minicloud.core.dto.InstanceRequest;
-import com.minicloud.core.dto.InstanceResponse;
+import com.minicloud.api.domain.Instance;
+import com.minicloud.api.domain.InstanceState;
+import com.minicloud.api.domain.InstanceType;
+import com.minicloud.api.domain.SecurityGroup;
+import com.minicloud.api.domain.InstanceRepository;
+import com.minicloud.api.domain.SecurityGroupRepository;
+import com.minicloud.api.domain.NetworkingAdvisor;
+import com.minicloud.api.dto.InstanceResponse;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
-import java.io.IOException;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.time.temporal.ChronoUnit;
@@ -23,155 +25,129 @@ import java.util.stream.Collectors;
 public class ComputeService {
 
     private final InstanceRepository instanceRepository;
-    private final UserRepository userRepository;
+    private final SecurityGroupRepository securityGroupRepository;
     private final ProcessManager processManager;
+    private final NetworkingAdvisor networkingAdvisor;
+    private final com.minicloud.api.audit.AuditService auditService;
+    private final com.minicloud.api.domain.UserRepository userRepository;
+    private final com.minicloud.api.iam.PolicyEvaluator policyEvaluator;
 
     private static final DateTimeFormatter FMT = DateTimeFormatter.ISO_LOCAL_DATE_TIME;
 
-    public InstanceResponse launchInstance(InstanceRequest request, String username) throws IOException {
-        User user = getUser(username);
-
+    public InstanceResponse launchInstance(UUID userId, String accountId, String name, String typeStr, UUID subnetId, UUID securityGroupId, String command) {
+        checkPermission(userId, "ec2:RunInstances", "arn:aws:ec2:*:*:instance/*");
+        
         InstanceType type;
         try {
-            type = InstanceType.valueOf(request.getType().toUpperCase());
+            type = InstanceType.valueOf(typeStr.toUpperCase());
         } catch (Exception e) {
-            type = InstanceType.MICRO;
+            type = InstanceType.T2_MICRO;
         }
 
-        String command = request.getCommand();
         if (command == null || command.isBlank()) {
-            String os = System.getProperty("os.name").toLowerCase();
-            command = os.contains("win") ? "ping -t localhost" : "sleep 3600";
+            command = "sleep 3600";
         }
 
-        // Create instance record as PENDING
         Instance instance = Instance.builder()
-                .name(request.getName())
+                .userId(userId)
+                .accountId(accountId)
+                .name(name)
                 .type(type)
-                .state(InstanceState.PENDING)
-                .userId(user.getId())
-                .command(command)
-                .launchedAt(LocalDateTime.now())
+                .state(InstanceState.RUNNING)
+                .privateIp(networkingAdvisor.assignPrivateIp())
+                .publicIp(networkingAdvisor.assignPublicIp())
+                .subnetId(subnetId)
+                .securityGroupId(securityGroupId)
+                .pid((long) (Math.random() * 100000)) // Simulation
                 .build();
-        instanceRepository.save(instance);
-
-        // Final instance variable for use in thread
-        final Instance finalInstance = instance;
-        final String finalCommand = command;
-
-        // Launch in background
-        new Thread(() -> {
-            try {
-                // BRIEF SLEEP to simulate cloud provisioning delay
-                Thread.sleep(2000);
-                int pid = processManager.launchProcess(finalCommand);
-                finalInstance.setPid(pid);
-                finalInstance.setState(InstanceState.RUNNING);
-                instanceRepository.save(finalInstance);
-                log.info("Instance '{}' transitioned to RUNNING with PID={}", finalInstance.getName(), pid);
-            } catch (Exception e) {
-                log.error("Failed to launch background process for instance {}: {}", finalInstance.getId(), e.getMessage());
-                finalInstance.setState(InstanceState.STOPPED);
-                instanceRepository.save(finalInstance);
-            }
-        }).start();
-
-        return toResponse(instance);
+        
+        Instance saved = instanceRepository.save(instance);
+        
+        String username = userRepository.findById(userId).map(u -> u.getUsername()).orElse(userId.toString());
+        auditService.recordSuccess(username, "EC2", "RunInstances", saved.getName());
+        
+        return toResponse(saved);
     }
 
-    public List<InstanceResponse> listInstances(String username) {
-        User user = getUser(username);
-        return instanceRepository.findAllByUserId(user.getId()).stream()
+    public void terminateInstance(UUID instanceId) {
+        Instance instance = instanceRepository.findById(instanceId)
+                .orElseThrow(() -> new RuntimeException("Instance not found"));
+        
+        checkPermission(instance.getUserId(), "ec2:TerminateInstances", "arn:aws:ec2:*:*:instance/" + instanceId);
+
+        if (instance.getPid() != null) {
+                processManager.terminate(instance.getPid());
+            }
+            instance.setState(InstanceState.TERMINATED);
+            instance.setPid(null);
+            instanceRepository.save(instance);
+            
+            String username = userRepository.findById(instance.getUserId()).map(u -> u.getUsername()).orElse(instance.getUserId().toString());
+            auditService.recordSuccess(username, "EC2", "TerminateInstances", instance.getName());
+    }
+
+
+    public InstanceResponse startInstance(UUID instanceId) {
+        Instance instance = instanceRepository.findById(instanceId)
+                .orElseThrow(() -> new RuntimeException("Instance not found"));
+        
+        checkPermission(instance.getUserId(), "ec2:StartInstances", "arn:aws:ec2:*:*:instance/" + instanceId);
+        
+        if (instance.getState() != InstanceState.STOPPED) {
+            throw new RuntimeException("Instance is not stopped");
+        }
+        
+        instance.setState(InstanceState.RUNNING);
+        instance.setLaunchedAt(LocalDateTime.now());
+        instance.setPid((long) (Math.random() * 100000));
+        Instance saved = instanceRepository.save(instance);
+        
+        String username = userRepository.findById(instance.getUserId()).map(u -> u.getUsername()).orElse(instance.getUserId().toString());
+        auditService.recordSuccess(username, "EC2", "StartInstances", instance.getName());
+        
+        return toResponse(saved);
+    }
+
+    public InstanceResponse stopInstance(UUID instanceId) {
+        Instance instance = instanceRepository.findById(instanceId)
+                .orElseThrow(() -> new RuntimeException("Instance not found"));
+
+        checkPermission(instance.getUserId(), "ec2:StopInstances", "arn:aws:ec2:*:*:instance/" + instanceId);
+
+        if (instance.getState() != InstanceState.RUNNING) {
+            throw new RuntimeException("Instance is not running");
+        }
+
+        if (instance.getPid() != null) {
+            processManager.terminate(instance.getPid());
+            instance.setPid(null);
+        }
+
+        instance.setState(InstanceState.STOPPED);
+        Instance saved = instanceRepository.save(instance);
+        
+        String username = userRepository.findById(instance.getUserId()).map(u -> u.getUsername()).orElse(instance.getUserId().toString());
+        auditService.recordSuccess(username, "EC2", "StopInstances", instance.getName());
+        
+        return toResponse(saved);
+    }
+
+    public InstanceResponse getInstance(UUID instanceId) {
+        return instanceRepository.findById(instanceId)
+                .map(this::toResponse)
+                .orElseThrow(() -> new RuntimeException("Instance not found"));
+    }
+
+    public List<InstanceResponse> getInstancesForAccount(String accountId) {
+        return instanceRepository.findByAccountId(accountId).stream()
                 .map(this::toResponse)
                 .collect(Collectors.toList());
     }
 
-    public InstanceResponse getInstance(UUID id, String username) {
-        User user = getUser(username);
-        Instance instance = instanceRepository.findByIdAndUserId(id, user.getId())
-                .orElseThrow(() -> new ResourceNotFoundException("Instance not found: " + id));
-        return toResponse(instance);
-    }
-
-    public InstanceResponse stopInstance(UUID id, String username) {
-        User user = getUser(username);
-        Instance instance = instanceRepository.findByIdAndUserId(id, user.getId())
-                .orElseThrow(() -> new ResourceNotFoundException("Instance not found: " + id));
-
-        if (instance.getState() != InstanceState.RUNNING) {
-            throw new IllegalArgumentException("Instance is not running: " + instance.getState());
-        }
-
-        if (instance.getPid() != null) {
-            processManager.stopProcess(instance.getPid());
-        }
-
-        instance.setState(InstanceState.STOPPED);
-        instanceRepository.save(instance);
-        return toResponse(instance);
-    }
-
-    public InstanceResponse startInstance(UUID id, String username) throws IOException {
-        User user = getUser(username);
-        Instance instance = instanceRepository.findByIdAndUserId(id, user.getId())
-                .orElseThrow(() -> new ResourceNotFoundException("Instance not found: " + id));
-
-        if (instance.getState() != InstanceState.STOPPED) {
-            throw new IllegalArgumentException("Instance must be STOPPED to start: " + instance.getState());
-        }
-
-        instance.setState(InstanceState.PENDING);
-        instanceRepository.save(instance);
-
-        final Instance finalInstance = instance;
-        new Thread(() -> {
-            try {
-                Thread.sleep(1500);
-                int pid = processManager.launchProcess(finalInstance.getCommand());
-                finalInstance.setPid(pid);
-                finalInstance.setState(InstanceState.RUNNING);
-                finalInstance.setLaunchedAt(LocalDateTime.now());
-                instanceRepository.save(finalInstance);
-            } catch (Exception e) {
-                log.error("Failed to start instance in background: {}", e.getMessage());
-                finalInstance.setState(InstanceState.STOPPED);
-                instanceRepository.save(finalInstance);
-            }
-        }).start();
-
-        return toResponse(instance);
-    }
-
-    public InstanceResponse terminateInstance(UUID id, String username) {
-        User user = getUser(username);
-        Instance instance = instanceRepository.findByIdAndUserId(id, user.getId())
-                .orElseThrow(() -> new ResourceNotFoundException("Instance not found: " + id));
-
-        if (instance.getPid() != null) {
-            processManager.terminateProcess(instance.getPid());
-        }
-
-        instance.setState(InstanceState.TERMINATED);
-        instance.setPid(null);
-        instanceRepository.save(instance);
-        return toResponse(instance);
-    }
-
-    public List<String> getConsoleOutput(UUID id, String username) {
-        User user = getUser(username);
-        Instance instance = instanceRepository.findByIdAndUserId(id, user.getId())
-                .orElseThrow(() -> new ResourceNotFoundException("Instance not found: " + id));
-
-        if (instance.getPid() == null) {
-            return List.of("Instance has no associated process (PID is null).");
-        }
-
-        return processManager.getConsoleOutput(instance.getPid());
-    }
-
-    private User getUser(String username) {
-        return userRepository.findByUsername(username)
-                .orElseThrow(() -> new ResourceNotFoundException("User not found: " + username));
+    public List<InstanceResponse> getActiveInstances() {
+        return instanceRepository.findByStateNot(InstanceState.TERMINATED).stream()
+                .map(this::toResponse)
+                .collect(Collectors.toList());
     }
 
     private InstanceResponse toResponse(Instance instance) {
@@ -179,16 +155,39 @@ public class ComputeService {
         if (instance.getLaunchedAt() != null && instance.getState() == InstanceState.RUNNING) {
             uptime = ChronoUnit.SECONDS.between(instance.getLaunchedAt(), LocalDateTime.now());
         }
+
+        String sgName = null;
+        if (instance.getSecurityGroupId() != null) {
+            sgName = securityGroupRepository.findById(instance.getSecurityGroupId())
+                    .map(SecurityGroup::getName)
+                    .orElse("Unknown");
+        }
+
         return InstanceResponse.builder()
                 .id(instance.getId().toString())
                 .name(instance.getName())
-                .type(instance.getType() != null ? instance.getType().name() : "MICRO")
-                .state(instance.getState() != null ? instance.getState().name() : "UNKNOWN")
-                .pid(instance.getPid())
-                .command(instance.getCommand())
+                .type(instance.getType().name())
+                .state(instance.getState().name())
+                .accountId(instance.getAccountId())
+                .subnetId(instance.getSubnetId() != null ? instance.getSubnetId().toString() : null)
+                .privateIp(instance.getPrivateIp())
+                .publicIp(instance.getPublicIp())
+                .pid(instance.getPid() != null ? instance.getPid().intValue() : null)
                 .uptimeSeconds(uptime)
                 .launchedAt(instance.getLaunchedAt() != null ? instance.getLaunchedAt().format(FMT) : "")
-                .updatedAt(instance.getUpdatedAt() != null ? instance.getUpdatedAt().format(FMT) : "")
+                .securityGroupId(instance.getSecurityGroupId() != null ? instance.getSecurityGroupId().toString() : null)
+                .securityGroupName(sgName)
                 .build();
     }
+
+    private void checkPermission(UUID userId, String action, String resource) {
+        com.minicloud.api.domain.User user = userRepository.findById(userId)
+                .orElseThrow(() -> new RuntimeException("User not found: " + userId));
+        
+        if (!policyEvaluator.isAuthorized(user, action, resource)) {
+            auditService.recordFailure(user.getUsername(), "EC2", action, resource, "Access Denied");
+            throw new RuntimeException("Access Denied: " + action + " on " + resource);
+        }
+    }
 }
+

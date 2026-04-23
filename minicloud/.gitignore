@@ -1,15 +1,40 @@
+# ── Maven build output ────────────────────────────────────────
 target/
 *.class
 *.jar
+!.mvn/wrapper/maven-wrapper.jar
 *.war
 *.ear
-minicloud-data/
+
+# ── Runtime data (never commit) ───────────────────────────────
+minicloud-data/**
+!minicloud-data/**/.gitkeep
 *.mv.db
 *.trace.db
+*.lock.db
+
+# ── Logs ──────────────────────────────────────────────────────
+*.log
+logs/
+
+# ── IDEs ──────────────────────────────────────────────────────
 .idea/
 *.iml
+.vscode/
 .classpath
 .project
 .settings/
-*.log
-logs/
+*.swp
+*.swo
+
+# ── OS junk ───────────────────────────────────────────────────
+.DS_Store
+Thumbs.db
+
+# ── Spring Boot devtools restart file ─────────────────────────
+.reloadtrigger
+
+# ── Local config overrides ────────────────────────────────────
+config/
+application-local.properties
+application-local.yml

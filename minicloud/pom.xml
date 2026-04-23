@@ -8,13 +8,11 @@
     <artifactId>minicloud</artifactId>
     <version>1.0.0</version>
     <packaging>pom</packaging>
-    <name>MiniCloud — Java Cloud Platform</name>
+    <name>MiniCloud - Java Cloud Platform</name>
     <description>Self-hosted AWS-equivalent cloud service platform</description>
 
     <modules>
-        <module>minicloud-core</module>
         <module>minicloud-api</module>
-        <module>minicloud-dashboard</module>
     </modules>
 
     <properties>
@@ -23,10 +21,13 @@
         <maven.compiler.target>17</maven.compiler.target>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
         <spring.boot.version>3.2.5</spring.boot.version>
+        <spring-cloud.version>2023.0.1</spring-cloud.version>
         <jjwt.version>0.12.3</jjwt.version>
         <lombok.version>1.18.32</lombok.version>
         <flatlaf.version>3.4</flatlaf.version>
         <springdoc.version>2.5.0</springdoc.version>
+        <quicktheories.version>0.26</quicktheories.version>
+        <testcontainers.version>1.19.7</testcontainers.version>
     </properties>
 
     <dependencyManagement>
@@ -40,10 +41,24 @@
                 <scope>import</scope>
             </dependency>
 
-            <!-- Internal module -->
+            <!-- Spring Cloud BOM -->
+            <dependency>
+                <groupId>org.springframework.cloud</groupId>
+                <artifactId>spring-cloud-dependencies</artifactId>
+                <version>${spring-cloud.version}</version>
+                <type>pom</type>
+                <scope>import</scope>
+            </dependency>
+
+            <!-- Internal modules -->
             <dependency>
                 <groupId>com.minicloud</groupId>
                 <artifactId>minicloud-core</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.minicloud</groupId>
+                <artifactId>minicloud-domain</artifactId>
                 <version>${project.version}</version>
             </dependency>
 
@@ -86,6 +101,31 @@
                 <artifactId>springdoc-openapi-starter-webmvc-ui</artifactId>
                 <version>${springdoc.version}</version>
             </dependency>
+
+            <!-- Property-based Testing -->
+            <dependency>
+                <groupId>org.quicktheories</groupId>
+                <artifactId>quicktheories</artifactId>
+                <version>${quicktheories.version}</version>
+                <scope>test</scope>
+            </dependency>
+
+            <!-- System Stubs for Environment Variable Testing -->
+            <dependency>
+                <groupId>uk.org.webcompere</groupId>
+                <artifactId>system-stubs-jupiter</artifactId>
+                <version>2.1.3</version>
+                <scope>test</scope>
+            </dependency>
+
+            <!-- Testcontainers -->
+            <dependency>
+                <groupId>org.testcontainers</groupId>
+                <artifactId>testcontainers-bom</artifactId>
+                <version>${testcontainers.version}</version>
+                <type>pom</type>
+                <scope>import</scope>
+            </dependency>
         </dependencies>
     </dependencyManagement>
 
@@ -99,6 +139,9 @@
                     <configuration>
                         <source>17</source>
                         <target>17</target>
+                        <compilerArgs>
+                            <arg>-parameters</arg>
+                        </compilerArgs>
                         <annotationProcessorPaths>
                             <path>
                                 <groupId>org.projectlombok</groupId>
@@ -121,7 +164,35 @@
                         </excludes>
                     </configuration>
                 </plugin>
+                <plugin>
+                    <groupId>org.apache.maven.plugins</groupId>
+                    <artifactId>maven-surefire-plugin</artifactId>
+                    <version>3.0.0</version>
+                </plugin>
             </plugins>
         </pluginManagement>
     </build>
+    
+    <profiles>
+        <profile>
+            <id>dev-fast</id>
+            <properties>
+                <skipTests>true</skipTests>
+                <maven.test.skip>true</maven.test.skip>
+                <maven.javadoc.skip>true</maven.javadoc.skip>
+            </properties>
+            <build>
+                <plugins>
+                    <plugin>
+                        <groupId>org.apache.maven.plugins</groupId>
+                        <artifactId>maven-compiler-plugin</artifactId>
+                        <configuration>
+                            <optimize>true</optimize>
+                            <debug>false</debug>
+                        </configuration>
+                    </plugin>
+                </plugins>
+            </build>
+        </profile>
+    </profiles>
 </project>

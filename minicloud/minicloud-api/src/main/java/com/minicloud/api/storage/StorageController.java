@@ -1,14 +1,15 @@
 package com.minicloud.api.storage;
 
-import com.minicloud.api.exception.ResourceNotFoundException;
-import com.minicloud.api.iam.*;
-import com.minicloud.core.dto.ApiResponse;
-import com.minicloud.core.dto.BucketResponse;
-import com.minicloud.core.dto.ObjectResponse;
+import com.minicloud.api.dto.ApiResponse;
+import com.minicloud.api.dto.BucketResponse;
+import com.minicloud.api.dto.ObjectResponse;
+import com.minicloud.api.domain.Bucket;
+import com.minicloud.api.domain.StorageObject;
+import com.minicloud.api.domain.BucketRepository;
+import com.minicloud.api.domain.ObjectRepository;
+import com.minicloud.api.storage.StorageService;
 import io.swagger.v3.oas.annotations.Operation;
-import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
-import jakarta.transaction.Transactional;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.core.io.InputStreamResource;
@@ -16,116 +17,149 @@ import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
-import org.springframework.security.access.AccessDeniedException;
-import org.springframework.security.core.Authentication;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.io.IOException;
 import java.io.InputStream;
-import java.time.format.DateTimeFormatter;
+import java.nio.file.Path;
 import java.util.List;
+import java.util.Map;
+import java.util.UUID;
 import java.util.stream.Collectors;
 
 @Slf4j
 @RestController
-@RequestMapping("/s3")
+@RequestMapping("/storage")
 @RequiredArgsConstructor
-@Tag(name = "MiniS3", description = "Object storage — buckets and files (AWS S3 equivalent)")
-@SecurityRequirement(name = "BearerAuth")
+@Tag(name = "S3 Storage", description = "Buckets and Object storage operations")
 public class StorageController {
 
     private final BucketRepository bucketRepository;
     private final ObjectRepository objectRepository;
     private final StorageService storageService;
-    private final UserRepository userRepository;
-    private final PolicyEvaluator policyEvaluator;
+    private final com.minicloud.api.audit.AuditService auditService;
+    private final com.minicloud.api.domain.UserRepository userRepository;
 
-    private static final DateTimeFormatter FMT = DateTimeFormatter.ISO_LOCAL_DATE_TIME;
+    @GetMapping("/buckets/{name}/objects")
+    @Operation(summary = "List all objects in a bucket")
+    public ResponseEntity<ApiResponse<List<ObjectResponse>>> listObjects(
+            @PathVariable String name,
+            @RequestParam UUID userId) {
 
-    // ─────────────────────────── BUCKETS ───────────────────────────
+        Bucket bucket = bucketRepository.findByUserIdAndName(userId, name)
+                .orElseThrow(() -> new RuntimeException("Bucket not found: " + name));
+
+        List<ObjectResponse> objects = objectRepository.findAllByBucketId(bucket.getId())
+                .stream()
+                .map(obj -> toObjectResponse(obj, name))
+                .collect(Collectors.toList());
+
+        return ResponseEntity.ok(ApiResponse.ok(objects));
+    }
+
+    @DeleteMapping("/buckets/{name}/objects/{*key}")
+    @Transactional
+    @Operation(summary = "Delete an object from a bucket")
+    public ResponseEntity<ApiResponse<String>> deleteObject(
+            @PathVariable String name,
+            @PathVariable String key,
+            @RequestParam UUID userId) {
+
+        final String normalizedKey = key.startsWith("/") ? key.substring(1) : key;
+        Bucket bucket = bucketRepository.findByUserIdAndName(userId, name)
+                .orElseThrow(() -> new RuntimeException("Bucket not found: " + name));
+
+        StorageObject obj = objectRepository.findByBucketIdAndObjectKey(bucket.getId(), normalizedKey)
+                .orElseThrow(() -> new RuntimeException("Object not found: " + normalizedKey));
+
+        storageService.deleteObject(obj.getLocalPath());
+        objectRepository.delete(obj);
+
+        String username = userRepository.findById(userId).map(u -> u.getUsername()).orElse(userId.toString());
+        auditService.recordSuccess(username, "S3", "DeleteObject", name + "/" + normalizedKey);
+
+        return ResponseEntity.ok(ApiResponse.ok("Object deleted", normalizedKey));
+    }
 
     @PostMapping("/buckets")
     @Operation(summary = "Create a new storage bucket")
     public ResponseEntity<ApiResponse<BucketResponse>> createBucket(
             @RequestParam String name,
-            Authentication auth) throws IOException {
+            @RequestParam UUID userId,
+            @RequestParam(required = false, defaultValue = "0") Integer retentionDays) throws IOException {
 
-        User user = getUser(auth);
-        checkPermission(user, "s3:CreateBucket", "mc:s3:" + name);
-
-        if (bucketRepository.existsByUserIdAndName(user.getId(), name)) {
+        if (bucketRepository.existsByUserIdAndName(userId, name)) {
             throw new IllegalArgumentException("Bucket already exists: " + name);
         }
 
-        storageService.createBucketDirectory(user.getId(), name);
+        storageService.createBucketDirectory(userId, name);
 
         Bucket bucket = Bucket.builder()
                 .name(name)
-                .userId(user.getId())
+                .userId(userId)
+                .retentionDays(retentionDays)
                 .build();
         Bucket saved = bucketRepository.save(bucket);
-
+        
+        String username = userRepository.findById(userId).map(u -> u.getUsername()).orElse(userId.toString());
+        auditService.recordSuccess(username, "S3", "CreateBucket", name);
+        
         return ResponseEntity.status(HttpStatus.CREATED)
-                .body(ApiResponse.ok("Bucket created", toBucketResponse(saved, 0)));
+                .body(ApiResponse.ok("Bucket created", toBucketResponse(saved, 0, 0)));
     }
 
-    @GetMapping("/buckets")
-    @Operation(summary = "List all buckets for current user")
-    public ResponseEntity<ApiResponse<List<BucketResponse>>> listBuckets(Authentication auth) {
-        User user = getUser(auth);
-        checkPermission(user, "s3:ListAllMyBuckets", "*");
-        List<BucketResponse> buckets = bucketRepository.findAllByUserId(user.getId()).stream()
-                .map(b -> toBucketResponse(b, objectRepository.countByBucketId(b.getId())))
+    @GetMapping("/buckets/user/{userId}")
+    @Operation(summary = "List all buckets for a user")
+    public ResponseEntity<ApiResponse<List<BucketResponse>>> listBuckets(@PathVariable UUID userId) {
+        List<BucketResponse> buckets = bucketRepository.findByUserId(userId).stream()
+                .map(b -> toBucketResponse(b, 
+                        objectRepository.countByBucketId(b.getId()),
+                        objectRepository.sumSizeByBucketId(b.getId())))
                 .collect(Collectors.toList());
         return ResponseEntity.ok(ApiResponse.ok(buckets));
     }
 
     @DeleteMapping("/buckets/{name}")
     @Transactional
-    @Operation(summary = "Delete a bucket (must be empty per AWS spec)")
     public ResponseEntity<ApiResponse<String>> deleteBucket(
             @PathVariable String name,
-            Authentication auth) {
+            @RequestParam UUID userId) {
 
-        User user = getUser(auth);
-        checkPermission(user, "s3:DeleteBucket", "mc:s3:" + name);
-        Bucket bucket = getBucketOrThrow(user, name);
+        Bucket bucket = bucketRepository.findByUserIdAndName(userId, name)
+                .orElseThrow(() -> new RuntimeException("Bucket not found"));
 
-        // AWS Parity: Bucket must be empty before deleting
-        if (!storageService.isBucketEmpty(user.getId(), name)) {
+        if (!storageService.isBucketEmpty(userId, name)) {
             return ResponseEntity.status(HttpStatus.BAD_REQUEST)
-                    .body(ApiResponse.error("Bucket '" + name + "' is not empty. Please delete all objects first."));
+                    .body(ApiResponse.error("Bucket is not empty"));
         }
 
-        // Delete metadata
         objectRepository.deleteAllByBucketId(bucket.getId());
         bucketRepository.delete(bucket);
-
-        // Delete directory
-        storageService.deleteBucketDirectory(user.getId(), name);
-
+        storageService.deleteBucketDirectory(userId, name);
+        
+        String username = userRepository.findById(userId).map(u -> u.getUsername()).orElse(userId.toString());
+        auditService.recordSuccess(username, "S3", "DeleteBucket", name);
+        
         return ResponseEntity.ok(ApiResponse.ok("Bucket deleted", name));
     }
 
-    // ─────────────────────────── OBJECTS ───────────────────────────
-
     @PostMapping("/buckets/{name}/upload")
-    @Operation(summary = "Upload a file to a bucket with optional metadata")
+    @Transactional
     public ResponseEntity<ApiResponse<ObjectResponse>> uploadObject(
             @PathVariable String name,
+            @RequestParam UUID userId,
             @RequestParam("file") MultipartFile file,
-            @RequestParam(required = false) java.util.Map<String, String> metadata,
-            Authentication auth) throws IOException {
+            @RequestParam(required = false) Map<String, String> metadata) throws IOException {
 
-        User user = getUser(auth);
-        checkPermission(user, "s3:PutObject", "mc:s3:" + name + "/*");
-        Bucket bucket = getBucketOrThrow(user, name);
+        Bucket bucket = bucketRepository.findByUserIdAndName(userId, name)
+                .orElseThrow(() -> new RuntimeException("Bucket not found"));
 
         String objectKey = file.getOriginalFilename() != null ? file.getOriginalFilename() : "unnamed";
-        String localPath = storageService.writeObject(user.getId(), name, objectKey, file.getInputStream());
+        byte[] content = storageService.readAllBytes(file.getInputStream());
+        String localPath = storageService.writeObject(userId, name, objectKey, new java.io.ByteArrayInputStream(content));
 
-        // Remove existing object with same key if it exists
         objectRepository.findByBucketIdAndObjectKey(bucket.getId(), objectKey)
                 .ifPresent(objectRepository::delete);
 
@@ -133,104 +167,53 @@ public class StorageController {
                 .bucketId(bucket.getId())
                 .objectKey(objectKey)
                 .sizeBytes(file.getSize())
-                .contentType(file.getContentType() != null ? file.getContentType() : "application/octet-stream")
+                .contentType(file.getContentType())
+                .content(content)
                 .localPath(localPath)
-                .metadata(metadata != null ? metadata : new java.util.HashMap<>())
+                .metadata(metadata)
                 .build();
 
         StorageObject saved = objectRepository.save(obj);
+        
+        String username = userRepository.findById(userId).map(u -> u.getUsername()).orElse(userId.toString());
+        auditService.recordSuccess(username, "S3", "PutObject", name + "/" + objectKey);
+        
         return ResponseEntity.status(HttpStatus.CREATED)
                 .body(ApiResponse.ok("File uploaded", toObjectResponse(saved, name)));
     }
 
-    @GetMapping("/buckets/{name}/list")
-    @Operation(summary = "List objects (supports folder simulation via prefix)")
-    public ResponseEntity<ApiResponse<List<ObjectResponse>>> listObjects(
-            @PathVariable String name,
-            @RequestParam(required = false) String prefix,
-            Authentication auth) {
-
-        User user = getUser(auth);
-        checkPermission(user, "s3:ListBucket", "mc:s3:" + name);
-        Bucket bucket = getBucketOrThrow(user, name);
-
-        List<ObjectResponse> objects = objectRepository.findAllByBucketId(bucket.getId()).stream()
-                .filter(o -> prefix == null || o.getObjectKey().startsWith(prefix))
-                .map(o -> toObjectResponse(o, name))
-                .collect(Collectors.toList());
-
-        return ResponseEntity.ok(ApiResponse.ok(objects));
-    }
-
-    @GetMapping("/buckets/{name}/{**key}")
-    @Operation(summary = "Download a file from a bucket")
+    @GetMapping("/buckets/{name}/{*key}")
     public ResponseEntity<InputStreamResource> downloadObject(
             @PathVariable String name,
             @PathVariable String key,
-            Authentication auth) throws IOException {
+            @RequestParam UUID userId) throws IOException {
 
-        User user = getUser(auth);
-        checkPermission(user, "s3:GetObject", "mc:s3:" + name + "/" + key);
-        Bucket bucket = getBucketOrThrow(user, name);
+        final String normalizedKey = key.startsWith("/") ? key.substring(1) : key;
+        Bucket bucket = bucketRepository.findByUserIdAndName(userId, name)
+                .orElseThrow(() -> new RuntimeException("Bucket not found"));
 
-        StorageObject obj = objectRepository.findByBucketIdAndObjectKey(bucket.getId(), key)
-                .orElseThrow(() -> new ResourceNotFoundException("Object not found: " + key));
+        StorageObject obj = objectRepository.findByBucketIdAndObjectKey(bucket.getId(), normalizedKey)
+                .orElseThrow(() -> new RuntimeException("Object not found"));
 
-        InputStream stream = storageService.readObject(obj.getLocalPath());
+        InputStream stream = obj.getContent() != null 
+                ? storageService.readObject(obj.getContent())
+                : storageService.readObjectFromDisk(obj.getLocalPath());
 
         return ResponseEntity.ok()
-                .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"" + key + "\"")
+                .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"" + Path.of(key).getFileName().toString() + "\"")
                 .contentType(MediaType.parseMediaType(obj.getContentType()))
                 .contentLength(obj.getSizeBytes())
                 .body(new InputStreamResource(stream));
     }
 
-    @DeleteMapping("/buckets/{name}/{**key}")
-    @Operation(summary = "Delete an object from a bucket")
-    public ResponseEntity<ApiResponse<String>> deleteObject(
-            @PathVariable String name,
-            @PathVariable String key,
-            Authentication auth) {
-
-        User user = getUser(auth);
-        checkPermission(user, "s3:DeleteObject", "mc:s3:" + name + "/" + key);
-        Bucket bucket = getBucketOrThrow(user, name);
-
-        StorageObject obj = objectRepository.findByBucketIdAndObjectKey(bucket.getId(), key)
-                .orElseThrow(() -> new ResourceNotFoundException("Object not found: " + key));
-
-        storageService.deleteObject(obj.getLocalPath());
-        objectRepository.delete(obj);
-
-        return ResponseEntity.ok(ApiResponse.ok("Object deleted", key));
-    }
-
-    // ─────────────────────────── HELPERS ───────────────────────────
-
-    private void checkPermission(User user, String action, String resource) {
-        if (!policyEvaluator.isAuthorized(user.getPolicies(), action, resource)) {
-            log.warn("Access denied for user '{}' attempting action '{}' on resource '{}'", user.getUsername(), action, resource);
-            throw new AccessDeniedException("User is not authorized to perform " + action + " on resource " + resource);
-        }
-    }
-
-    private User getUser(Authentication auth) {
-        return userRepository.findByUsername(auth.getName())
-                .orElseThrow(() -> new ResourceNotFoundException("User not found"));
-    }
-
-    private Bucket getBucketOrThrow(User user, String name) {
-        return bucketRepository.findByUserIdAndName(user.getId(), name)
-                .orElseThrow(() -> new ResourceNotFoundException("Bucket not found: " + name));
-    }
-
-    private BucketResponse toBucketResponse(Bucket bucket, long count) {
+    private BucketResponse toBucketResponse(Bucket b, long count, long size) {
         return BucketResponse.builder()
-                .id(bucket.getId().toString())
-                .name(bucket.getName())
-                .userId(bucket.getUserId().toString())
+                .id(b.getId().toString())
+                .name(b.getName())
+                .ownerId(b.getUserId().toString())
+                .createdAt(b.getCreatedAt() != null ? b.getCreatedAt().toString() : null)
                 .objectCount(count)
-                .createdAt(bucket.getCreatedAt() != null ? bucket.getCreatedAt().format(FMT) : "")
+                .totalSizeBytes(size)
                 .build();
     }
 
@@ -241,8 +224,9 @@ public class StorageController {
                 .objectKey(obj.getObjectKey())
                 .sizeBytes(obj.getSizeBytes())
                 .contentType(obj.getContentType())
+                .lastModified(obj.getLastModified() != null ? obj.getLastModified().toString() : null)
+                .createdAt(obj.getCreatedAt() != null ? obj.getCreatedAt().toString() : null)
                 .metadata(obj.getMetadata())
-                .createdAt(obj.getCreatedAt() != null ? obj.getCreatedAt().format(FMT) : "")
                 .build();
     }
 }

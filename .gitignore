@@ -6,7 +6,8 @@ target/
 *.ear
 
 # Runtime data
-minicloud-data/
+minicloud-data/**
+!minicloud-data/**/.gitkeep
 *.mv.db
 *.trace.db
 

@@ -1,41 +1,97 @@
 @echo off
 setlocal enabledelayedexpansion
-echo =====================================
-echo   MiniCloud — Java Cloud Platform
-echo =====================================
+title MiniCloud -- Java Cloud Monolith
+echo ============================================================
+echo   MiniCloud -- Java Cloud Platform (Modular Monolith)
+echo   Optimized for Local Development ^& Laptop Use
+echo ============================================================
 echo.
 
 set "ROOT=%~dp0"
+set "MODE=WEB"
 
-REM Build all modules
-echo [1/3] Building project...
+REM ── Check CLI Arguments ───────────────────────────────────────────────────
+if /i "%~1"=="web" (
+    set "MODE=WEB"
+    goto START_BUILD
+)
+if /i "%~1"=="desktop" (
+    set "MODE=DESKTOP"
+    goto START_BUILD
+)
+
+REM ── Interactive Mode Selection ────────────────────────────────────────────
+echo  Select Startup Mode:
+echo    [1] Production Web Service (Headless API + Tray Icon)
+echo    [2] Desktop UI (Swing Dashboard + Embedded API)
+set /p CHOICE="  Enter choice [1-2] (Default 1): "
+
+if "%CHOICE%"=="2" (
+    set "MODE=DESKTOP"
+) else (
+    set "MODE=WEB"
+)
+
+:START_BUILD
+echo.
+echo  Selected Mode: %MODE%
+echo.
+
+REM ── Build ─────────────────────────────────────────────────────────────────
+echo  Building MiniCloud...
 cd /d "%ROOT%"
-call "%ROOT%mvnw.cmd" clean install -q -DskipTests
+call "%ROOT%mvnw.cmd" clean package -DskipTests -pl minicloud-api -am -q
 if errorlevel 1 (
-    echo BUILD FAILED. Check Maven output above for errors.
+    echo.
+    echo  BUILD FAILED. Please check the maven output.
     pause
     exit /b 1
 )
-echo Build successful!
+echo  Build successful!
 echo.
 
-REM Start API server in a new window (background)
-echo [2/3] Starting MiniCloud API on port 8080...
-start "MiniCloud API Server" cmd /k "cd /d "%ROOT%minicloud-api" && "%ROOT%mvnw.cmd" spring-boot:run"
+REM ── JVM Args (Optimized for Laptop) ───────────────────────────────────────
+set "JVM_OPTS=-Xmx512m -XX:MaxMetaspaceSize=256m -XX:+UseG1GC -XX:MaxGCPauseMillis=200"
 
-echo Waiting 15 seconds for API to start...
-timeout /t 15 /nobreak > nul
+REM ── Start Monolith ────────────────────────────────────────────────────────
+echo  Starting MiniCloud in %MODE% mode...
+start "MiniCloud" cmd /k "cd /d "%ROOT%minicloud-api" && java %JVM_OPTS% -jar target/minicloud-api-1.0.0.jar --mode=%MODE%"
 
-REM Check if API is up (optional helper)
+REM ── Wait for Ready ────────────────────────────────────────────────────────
+echo  Waiting for platform to be ready...
+set RETRIES=0
+:WAIT_LOOP
+timeout /t 3 /nobreak >nul
+set /a RETRIES+=1
+curl -s -o nul -w "%%{http_code}" http://localhost:8080/actuator/health 2>nul | findstr "200" >nul
+if errorlevel 1 (
+    if !RETRIES! geq 20 (
+        echo  WARNING: Platform taking longer than expected to start.
+        goto FINAL_STEPS
+    )
+    echo  Still loading... [!RETRIES!/20]
+    goto WAIT_LOOP
+)
+echo  MiniCloud is LIVE!
 echo.
-echo API is likely ready. Opening Swagger UI...
-start http://localhost:8080/swagger-ui.html
 
-REM Launch Swing Dashboard
-echo [3/3] Launching Swing Dashboard...
-cd /d "%ROOT%minicloud-dashboard"
-call "%ROOT%mvnw.cmd" exec:java -Dexec.mainClass="com.minicloud.ui.SwingMain"
+:FINAL_STEPS
+if /i "%MODE%"=="WEB" (
+    echo  MiniCloud is running as a background service.
+    echo  Access endpoints at:
+    echo    - H2 Console:  http://localhost:8080/h2-console
+    echo    - Swagger UI:  http://localhost:8080/swagger-ui.html
+    echo    - Health:      http://localhost:8080/actuator/health
+    echo.
+    echo  (A system tray icon is also available for management)
+) else (
+    echo  MiniCloud Desktop UI is launching...
+    echo  The pure Java management dashboard will appear shortly.
+)
 
 echo.
-echo MiniCloud Dashboard session ended.
+echo ============================================================
+echo   MiniCloud is running.
+echo   Press any key to close this launcher.
+echo ============================================================
 pause

@@ -1,11 +1,13 @@
 package com.minicloud.api.monitoring;
 
+import com.minicloud.api.domain.Alarm;
+import com.minicloud.api.domain.AlarmRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 
 import java.util.List;
+import java.util.UUID;
 
 @Slf4j
 @Service
@@ -13,60 +15,33 @@ import java.util.List;
 public class AlarmService {
 
     private final AlarmRepository alarmRepository;
-    private final MetricsService metricsService;
+    private final NotificationService notificationService;
 
-    /**
-     * Check all alarms every 10 seconds.
-     */
-    @Scheduled(fixedRate = 10000)
-    public void evaluateAlarms() {
-        List<Alarm> alarms = alarmRepository.findAll();
-        if (alarms.isEmpty()) return;
-
-        log.debug("Evaluating {} CloudWatch alarms...", alarms.size());
-
-        for (Alarm alarm : alarms) {
-            evaluateAlarm(alarm);
-        }
+    public List<Alarm> getAlarmsForUser(UUID userId) {
+        return alarmRepository.findByUserId(userId);
     }
 
-    private void evaluateAlarm(Alarm alarm) {
-        Double currentMetricValue = getCurrentMetricValue(alarm.getMetricName());
-        if (currentMetricValue == null) {
-            updateAlarmState(alarm, Alarm.AlarmState.INSUFFICIENT_DATA);
-            return;
-        }
-
-        boolean isTriggered = false;
-        if (alarm.getComparisonOperator() == Alarm.ComparisonOperator.GREATER_THAN) {
-            isTriggered = currentMetricValue > alarm.getThreshold();
-        } else if (alarm.getComparisonOperator() == Alarm.ComparisonOperator.LESS_THAN) {
-            isTriggered = currentMetricValue < alarm.getThreshold();
-        }
-
-        if (isTriggered) {
-            updateAlarmState(alarm, Alarm.AlarmState.ALARM);
-        } else {
-            updateAlarmState(alarm, Alarm.AlarmState.OK);
-        }
+    public Alarm createAlarm(Alarm alarm) {
+        alarm.setState(Alarm.AlarmState.INSUFFICIENT_DATA);
+        return alarmRepository.save(alarm);
     }
 
-    private Double getCurrentMetricValue(String name) {
-        var metrics = metricsService.getSystemMetrics();
-        return switch (name) {
-            case "CPUUtilization" -> metrics.getCpuPercent();
-            case "RAMUsage" -> (double) metrics.getHeapUsedMb();
-            case "DiskUsage" -> (double) metrics.getDiskUsedGb();
-            default -> null;
-        };
+    public void updateAlarmState(UUID alarmId, Alarm.AlarmState newState) {
+        alarmRepository.findById(alarmId).ifPresent(alarm -> {
+            if (alarm.getState() != newState) {
+                log.info("Alarm '{}' changed state from {} to {}", alarm.getName(), alarm.getState(), newState);
+                alarm.setState(newState);
+                alarmRepository.save(alarm);
+                
+                if (newState == Alarm.AlarmState.ALARM && alarm.getNotificationTopic() != null) {
+                    notificationService.sendNotification(alarm.getNotificationTopic(), 
+                        "ALARM: " + alarm.getName() + " triggered! Threshold: " + alarm.getThreshold());
+                }
+            }
+        });
     }
 
-    private void updateAlarmState(Alarm alarm, Alarm.AlarmState newState) {
-        if (alarm.getState() != newState) {
-            log.info("ALARM STATE CHANGE: '{}' moved from {} to {} (Value: {})", 
-                    alarm.getName(), alarm.getState(), newState, getCurrentMetricValue(alarm.getMetricName()));
-            alarm.setState(newState);
-            alarmRepository.save(alarm);
-        }
+    public List<Alarm> getAllAlarms() {
+        return alarmRepository.findAll();
     }
 }
