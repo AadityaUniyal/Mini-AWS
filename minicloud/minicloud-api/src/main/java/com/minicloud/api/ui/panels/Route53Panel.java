@@ -83,7 +83,7 @@ public class Route53Panel extends JPanel {
         String accountId = ApiClient.getSession().getAccountId();
         SwingWorker<JsonNode, Void> worker = new SwingWorker<>() {
             @Override protected JsonNode doInBackground() throws Exception {
-                return ApiClient.get("/api/route53/zones/" + accountId);
+                return ApiClient.get("/api/v1/route53/zones/" + accountId);
             }
             @Override protected void done() {
                 try {
@@ -105,7 +105,7 @@ public class Route53Panel extends JPanel {
         
         SwingWorker<JsonNode, Void> worker = new SwingWorker<>() {
             @Override protected JsonNode doInBackground() throws Exception {
-                return ApiClient.get("/api/route53/records/" + zoneId);
+                return ApiClient.get("/api/v1/route53/records/" + zoneId);
             }
             @Override protected void done() {
                 try {
@@ -127,7 +127,7 @@ public class Route53Panel extends JPanel {
         String accountId = ApiClient.getSession().getAccountId();
         SwingWorker<Void, Void> worker = new SwingWorker<>() {
             @Override protected Void doInBackground() throws Exception {
-                ApiClient.post("/api/route53/zones", java.util.Map.of("name", name, "accountId", accountId, "comment", "Created via console"));
+                ApiClient.post("/api/v1/route53/zones", java.util.Map.of("name", name, "accountId", accountId, "comment", "Created via console"));
                 return null;
             }
             @Override protected void done() { refreshZones(); }
@@ -152,7 +152,7 @@ public class Route53Panel extends JPanel {
             String accountId = ApiClient.getSession().getAccountId();
             SwingWorker<Void, Void> worker = new SwingWorker<>() {
                 @Override protected Void doInBackground() throws Exception {
-                    ApiClient.post("/api/route53/records", java.util.Map.of(
+                    ApiClient.post("/api/v1/route53/records", java.util.Map.of(
                         "zoneId", zoneId, "name", nameField.getText(), "type", typeField.getText(),
                         "value", valField.getText(), "ttl", ttlField.getText(), "accountId", accountId
                     ));

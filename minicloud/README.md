@@ -84,10 +84,10 @@ You can also set the `MINICLOUD_MODE` environment variable to `WEB` or `DESKTOP`
 | URL | Description |
 |-----|-------------|
 | `http://localhost:8080` | Web Management Console |
-| `http://localhost:8080/swagger-ui.html` | Full API documentation |
+| `http://localhost:8080/api/v1/swagger-ui.html` | Full API documentation |
 | `http://localhost:8080/h2-console` | Database browser |
 | `http://localhost:8080/actuator/health` | Health check |
-| `http://localhost:8080/auth/login` | Login (POST) |
+| `http://localhost:8080/api/v1/auth/login` | Login (POST) |
 
 ---
 
@@ -95,33 +95,33 @@ You can also set the `MINICLOUD_MODE` environment variable to `WEB` or `DESKTOP`
 
 **Login:**
 ```bash
-curl -X POST http://localhost:8080/auth/login \
+curl -X POST http://localhost:8080/api/v1/auth/login \
   -H "Content-Type: application/json" \
   -d '{"loginType":"ROOT","email":"admin@minicloud.io","password":"admin123"}'
 ```
 
 **Launch an EC2 instance:**
 ```bash
-curl -X POST "http://localhost:8080/api/compute/instances/launch?name=my-vm&type=T2_MICRO&userId=<userId>&accountId=123456789012" \
+curl -X POST "http://localhost:8080/api/v1/compute/instances/launch?name=my-vm&type=T2_MICRO&userId=<userId>&accountId=123456789012" \
   -H "Authorization: Bearer <token>"
 ```
 
 **Create an S3 bucket:**
 ```bash
-curl -X POST "http://localhost:8080/storage/buckets?name=my-bucket&userId=<userId>" \
+curl -X POST "http://localhost:8080/api/v1/storage/buckets?name=my-bucket&userId=<userId>" \
   -H "Authorization: Bearer <token>"
 ```
 
 **Upload a file:**
 ```bash
-curl -X POST "http://localhost:8080/storage/buckets/my-bucket/upload?userId=<userId>" \
+curl -X POST "http://localhost:8080/api/v1/storage/buckets/my-bucket/upload?userId=<userId>" \
   -H "Authorization: Bearer <token>" \
   -F "file=@myfile.txt"
 ```
 
 **Deploy a Lambda function:**
 ```bash
-curl -X POST http://localhost:8080/lambda \
+curl -X POST http://localhost:8080/api/v1/lambda \
   -H "Authorization: Bearer <token>" \
   -H "Content-Type: application/json" \
   -d '{"name":"hello","runtime":"BASH","handler":"hello.sh","memoryMb":128,"timeoutSec":10}'
@@ -129,7 +129,7 @@ curl -X POST http://localhost:8080/lambda \
 
 **Invoke a Lambda function (public):**
 ```bash
-curl -X POST http://localhost:8080/lambda/invoke/hello \
+curl -X POST http://localhost:8080/api/v1/lambda/invoke/hello \
   -d '{"key":"value"}'
 ```
 

@@ -149,7 +149,7 @@ public class BillingPanel extends JPanel {
         String accountId = ApiClient.getSession().getAccountId();
         SwingWorker<JsonNode, Void> worker = new SwingWorker<>() {
             @Override protected JsonNode doInBackground() throws Exception {
-                return ApiClient.get("/api/billing/summary/" + accountId);
+                return ApiClient.get("/api/v1/billing/summary/" + accountId);
             }
             @Override protected void done() {
                 try {

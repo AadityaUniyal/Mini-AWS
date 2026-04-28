@@ -28,7 +28,7 @@ import java.util.Map;
  *  POST /tenants/{id}/usage/release   → Release used resources
  */
 @RestController
-@RequestMapping("/tenants")
+@RequestMapping("/api/v1/tenants")
 @RequiredArgsConstructor
 @Tag(name = "Multi-Tenancy", description = "Tenant management and resource quota enforcement")
 public class TenantController {

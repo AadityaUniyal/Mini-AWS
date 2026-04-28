@@ -15,7 +15,7 @@ import org.springframework.web.bind.annotation.*;
  * Called by the API Gateway or other services to check authorization.
  */
 @RestController
-@RequestMapping("/iam/evaluate")
+@RequestMapping("/api/v1/iam/evaluate")
 @RequiredArgsConstructor
 @Tag(name = "Policy Evaluation", description = "Internal policy evaluation endpoint for service-to-service calls")
 @SecurityRequirement(name = "BearerAuth")

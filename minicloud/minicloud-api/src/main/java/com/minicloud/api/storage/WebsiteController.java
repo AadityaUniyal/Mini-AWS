@@ -17,7 +17,7 @@ import java.util.UUID;
 
 @Slf4j
 @RestController
-@RequestMapping("/site")
+@RequestMapping("/api/v1/site")
 @RequiredArgsConstructor
 @Tag(name = "MiniCDN", description = "Static website hosting from S3 buckets")
 public class WebsiteController {

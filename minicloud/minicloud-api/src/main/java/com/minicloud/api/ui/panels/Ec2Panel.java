@@ -89,7 +89,7 @@ public class Ec2Panel extends JPanel {
         
         SwingWorker<JsonNode, Void> w = new SwingWorker<>() {
             @Override protected JsonNode doInBackground() throws Exception {
-                return ApiClient.get("/api/compute/instances/account/" + accountId);
+                return ApiClient.get("/api/v1/compute/instances/account/" + accountId);
             }
             @Override protected void done() {
                 try {
@@ -141,7 +141,7 @@ public class Ec2Panel extends JPanel {
 
             SwingWorker<Void, Void> w = new SwingWorker<>() {
                 @Override protected Void doInBackground() throws Exception {
-                    ApiClient.post("/api/compute/instances/launch?name=" + params.get("name") 
+                    ApiClient.post("/api/v1/compute/instances/launch?name=" + params.get("name") 
                     + "&type=" + params.get("type")
                     + "&userId=" + params.get("userId")
                     + "&accountId=" + params.get("accountId")
@@ -168,7 +168,7 @@ public class Ec2Panel extends JPanel {
         
         SwingWorker<Void, Void> w = new SwingWorker<>() {
             @Override protected Void doInBackground() throws Exception {
-                ApiClient.post("/api/compute/instances/" + realId + "/" + action, null);
+                ApiClient.post("/api/v1/compute/instances/" + realId + "/" + action, null);
                 return null;
             }
             @Override protected void done() { refresh(); }

@@ -14,7 +14,7 @@ import java.util.List;
 import java.util.UUID;
 
 @RestController
-@RequestMapping("/rds/instances")
+@RequestMapping("/api/v1/rds/instances")
 @RequiredArgsConstructor
 @Tag(name = "MiniRDS", description = "Relational database as a service management")
 public class RdsController {

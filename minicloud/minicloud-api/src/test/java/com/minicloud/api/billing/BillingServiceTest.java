@@ -27,6 +27,9 @@ class BillingServiceTest {
     @Mock
     private BucketRepository bucketRepository;
     
+    @Mock
+    private RdsRepository rdsRepository;
+    
     @InjectMocks
     private BillingService billingService;
 
@@ -43,6 +46,7 @@ class BillingServiceTest {
     void terminated_instances_are_not_billed() {
         // arrange - no running instances
         when(instanceRepository.findByState(InstanceState.RUNNING)).thenReturn(List.of());
+        when(rdsRepository.findAll()).thenReturn(List.of());
         when(bucketRepository.findAll()).thenReturn(List.of());
         
         // act
@@ -73,6 +77,7 @@ class BillingServiceTest {
         runningInstance.setAccountId("123456789012");
         
         when(instanceRepository.findByState(InstanceState.RUNNING)).thenReturn(List.of(runningInstance));
+        when(rdsRepository.findAll()).thenReturn(List.of());
         when(bucketRepository.findAll()).thenReturn(List.of());
         
         // act

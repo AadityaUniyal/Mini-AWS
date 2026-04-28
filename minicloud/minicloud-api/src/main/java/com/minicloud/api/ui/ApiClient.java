@@ -44,7 +44,7 @@ public class ApiClient {
             body.put("password", password);
 
             String json = mapper.writeValueAsString(body);
-            String response = postRaw("/auth/login", json);
+            String response = postRaw("/api/v1/auth/login", json);
             
             JsonNode root = mapper.readTree(response);
             JsonNode data = root.get("data");
@@ -72,7 +72,7 @@ public class ApiClient {
             body.put("password", password);
 
             String json = mapper.writeValueAsString(body);
-            String response = postRaw("/auth/register", json);
+            String response = postRaw("/api/v1/auth/register", json);
             
             JsonNode root = mapper.readTree(response);
             JsonNode data = root.get("data");

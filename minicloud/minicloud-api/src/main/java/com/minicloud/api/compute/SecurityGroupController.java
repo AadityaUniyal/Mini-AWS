@@ -16,7 +16,7 @@ import java.util.UUID;
 import java.util.stream.Collectors;
 
 @RestController
-@RequestMapping("/api/compute/security-groups")
+@RequestMapping("/api/v1/compute/security-groups")
 @RequiredArgsConstructor
 @Tag(name = "EC2 VPC Security", description = "Firewall rules management")
 public class SecurityGroupController {

@@ -12,7 +12,7 @@ import java.util.Map;
 import java.util.UUID;
 
 @RestController
-@RequestMapping("/api/route53")
+@RequestMapping("/api/v1/route53")
 @Tag(name = "Route 53", description = "High-fidelity DNS management")
 @RequiredArgsConstructor
 public class Route53Controller {

@@ -65,9 +65,10 @@ public class RdsPanel extends JPanel {
     }
 
     private void refresh() {
+        if (!ApiClient.isLoggedIn()) return;
         SwingWorker<JsonNode, Void> w = new SwingWorker<>() {
             @Override protected JsonNode doInBackground() throws Exception {
-                return ApiClient.get("/rds/instances");
+                return ApiClient.get("/api/v1/rds/instances");
             }
             @Override protected void done() {
                 try {
@@ -113,7 +114,7 @@ public class RdsPanel extends JPanel {
         );
         SwingWorker<Void, Void> w = new SwingWorker<>() {
             @Override protected Void doInBackground() throws Exception {
-                ApiClient.post("/rds/instances", req); return null;
+                ApiClient.post("/api/v1/rds/instances", req); return null;
             }
             @Override protected void done() { refresh(); }
         };
@@ -126,8 +127,8 @@ public class RdsPanel extends JPanel {
         String id = (String) tableModel.getValueAt(row, 0);
         SwingWorker<Void, Void> w = new SwingWorker<>() {
             @Override protected Void doInBackground() throws Exception {
-                if ("delete".equals(action)) ApiClient.delete("/rds/instances/" + id);
-                else ApiClient.post("/rds/instances/" + id + "/" + action, Map.of());
+                if ("delete".equals(action)) ApiClient.delete("/api/v1/rds/instances/" + id);
+                else ApiClient.post("/api/v1/rds/instances/" + id + "/" + action, Map.of());
                 return null;
             }
             @Override protected void done() { refresh(); }

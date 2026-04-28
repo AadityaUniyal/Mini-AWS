@@ -76,8 +76,15 @@ public class MetricsPanel extends JPanel {
         center.add(bars,     BorderLayout.NORTH);
         center.add(rawPanel, BorderLayout.CENTER);
 
-        add(title,  BorderLayout.NORTH);
-        add(cards,  BorderLayout.NORTH);
+        // Wrap title + cards into a single top panel
+        JPanel topPanel = new JPanel();
+        topPanel.setLayout(new BoxLayout(topPanel, BoxLayout.Y_AXIS));
+        topPanel.setOpaque(false);
+        topPanel.add(title);
+        topPanel.add(Box.createVerticalStrut(8));
+        topPanel.add(cards);
+
+        add(topPanel, BorderLayout.NORTH);
         add(center, BorderLayout.CENTER);
     }
 
@@ -118,7 +125,7 @@ public class MetricsPanel extends JPanel {
         timer.scheduleAtFixedRate(new TimerTask() {
             @Override public void run() {
                 try {
-                    JsonNode m = ApiClient.get("/monitoring/metrics/current");
+                    JsonNode m = ApiClient.get("/api/v1/monitoring/metrics/current");
                     SwingUtilities.invokeLater(() -> updateUI(m));
                 } catch (Exception ignored) {}
             }

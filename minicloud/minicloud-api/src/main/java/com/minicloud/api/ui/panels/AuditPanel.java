@@ -83,15 +83,17 @@ public class AuditPanel extends JPanel {
     }
 
     private void refresh() {
+        if (!ApiClient.isLoggedIn()) return;
         SwingWorker<JsonNode, Void> w = new SwingWorker<>() {
             @Override protected JsonNode doInBackground() throws Exception {
-                return ApiClient.get("/monitoring/audit?limit=100");
+                return ApiClient.get("/api/v1/monitoring/audit?limit=100");
             }
             @Override protected void done() {
                 try {
                     tableModel.setRowCount(0);
-                    JsonNode arr = get();
-                    if (arr.isArray()) {
+                    JsonNode resp = get();
+                    JsonNode arr = resp.has("data") ? resp.get("data") : resp;
+                    if (arr != null && arr.isArray()) {
                     arr.forEach(n -> tableModel.addRow(new Object[]{
                             formatTime(n.path("timestamp").asText("—")),
                             n.path("username").asText(n.path("userId").asText("system")),

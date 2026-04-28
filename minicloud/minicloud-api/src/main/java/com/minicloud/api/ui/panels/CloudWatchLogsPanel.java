@@ -75,7 +75,7 @@ public class CloudWatchLogsPanel extends JPanel {
         
         SwingWorker<JsonNode, Void> worker = new SwingWorker<>() {
             @Override protected JsonNode doInBackground() throws Exception {
-                return ApiClient.get("/api/logs/streams/" + accountId);
+                return ApiClient.get("/api/v1/logs/streams/" + accountId);
             }
             @Override protected void done() {
                 try {
@@ -107,9 +107,9 @@ public class CloudWatchLogsPanel extends JPanel {
         SwingWorker<JsonNode, Void> worker = new SwingWorker<>() {
             @Override protected JsonNode doInBackground() throws Exception {
                 // We'll search by row for stream ID.
-                JsonNode streams = ApiClient.get("/api/logs/streams/" + accountId).get("data");
+                JsonNode streams = ApiClient.get("/api/v1/logs/streams/" + accountId).get("data");
                 String streamId = streams.get(row).get("id").asText();
-                return ApiClient.get("/api/logs/events/" + streamId);
+                return ApiClient.get("/api/v1/logs/events/" + streamId);
             }
             @Override protected void done() {
                 try {

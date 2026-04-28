@@ -2,12 +2,15 @@ package com.minicloud.api.integration;
 
 import com.minicloud.api.domain.*;
 import com.minicloud.api.dto.ApiResponse;
+import com.minicloud.api.config.TestSecurityConfig;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.web.client.TestRestTemplate;
 import org.springframework.boot.test.web.server.LocalServerPort;
+import org.springframework.context.annotation.Import;
 import org.springframework.http.*;
 import org.springframework.test.context.TestPropertySource;
 
@@ -31,8 +34,10 @@ import static org.junit.jupiter.api.Assertions.*;
     "spring.datasource.url=jdbc:h2:mem:testdb",
     "spring.datasource.username=sa",
     "spring.datasource.password=",
-    "spring.jpa.hibernate.ddl-auto=create-drop"
+    "spring.jpa.hibernate.ddl-auto=create-drop",
+    "spring.profiles.active=test"
 })
+@Import(TestSecurityConfig.class)
 class RestEndpointIntegrationTest {
 
     @LocalServerPort
@@ -59,21 +64,40 @@ class RestEndpointIntegrationTest {
     private String baseUrl;
     private UUID testUserId;
     private String testAccountId;
+    private String testUsername;
 
     @BeforeEach
     void setUp() {
         baseUrl = "http://localhost:" + port;
         
-        // Create test user
+        // Clean up any existing test data
+        userRepository.deleteAll();
+        
+        // Create test user with unique username
+        String uniqueUsername = "testuser-" + System.currentTimeMillis();
         User testUser = User.builder()
-            .username("testuser")
+            .username(uniqueUsername)
             .email("test@example.com")
             .passwordHash("hashedpassword")
             .accountId("test-account-123")
+            .role(UserRole.ADMIN)
+            .enabled(true)
+            .rootUser(false)
             .build();
         testUser = userRepository.save(testUser);
         testUserId = testUser.getId();
         testAccountId = testUser.getAccountId();
+        testUsername = uniqueUsername;
+    }
+
+    @AfterEach
+    void tearDown() {
+        // Clean up test data
+        userRepository.deleteAll();
+        bucketRepository.deleteAll();
+        instanceRepository.deleteAll();
+        functionRepository.deleteAll();
+        rdsRepository.deleteAll();
     }
 
     /**
@@ -83,7 +107,7 @@ class RestEndpointIntegrationTest {
     @Test
     void testEc2Endpoints() {
         // Test list instances endpoint
-        String listUrl = baseUrl + "/api/compute/instances/account/" + testAccountId;
+        String listUrl = baseUrl + "/api/v1/compute/instances/account/" + testAccountId;
         ResponseEntity<String> listResponse = restTemplate.getForEntity(listUrl, String.class);
         
         assertEquals(HttpStatus.OK, listResponse.getStatusCode(), 
@@ -98,7 +122,7 @@ class RestEndpointIntegrationTest {
     @Test
     void testS3Endpoints() {
         // Test list buckets endpoint
-        String listUrl = baseUrl + "/storage/buckets/user/" + testUserId;
+        String listUrl = baseUrl + "/api/v1/storage/buckets/user/" + testUserId;
         ResponseEntity<String> listResponse = restTemplate.getForEntity(listUrl, String.class);
         
         assertEquals(HttpStatus.OK, listResponse.getStatusCode(),
@@ -113,7 +137,7 @@ class RestEndpointIntegrationTest {
     @Test
     void testLambdaEndpoints() {
         // Test list functions endpoint
-        String listUrl = baseUrl + "/lambda?userId=" + testUserId;
+        String listUrl = baseUrl + "/api/v1/lambda?userId=" + testUserId;
         ResponseEntity<String> listResponse = restTemplate.getForEntity(listUrl, String.class);
         
         assertEquals(HttpStatus.OK, listResponse.getStatusCode(),
@@ -128,7 +152,7 @@ class RestEndpointIntegrationTest {
     @Test
     void testRdsEndpoints() {
         // Test list RDS instances endpoint
-        String listUrl = baseUrl + "/rds/instances/user/" + testUserId;
+        String listUrl = baseUrl + "/api/v1/rds/instances/user/" + testUserId;
         ResponseEntity<String> listResponse = restTemplate.getForEntity(listUrl, String.class);
         
         assertEquals(HttpStatus.OK, listResponse.getStatusCode(),
@@ -143,7 +167,7 @@ class RestEndpointIntegrationTest {
     @Test
     void testIamEndpoints() {
         // Test list users endpoint
-        String listUrl = baseUrl + "/api/iam/users";
+        String listUrl = baseUrl + "/api/v1/iam/users";
         ResponseEntity<String> listResponse = restTemplate.getForEntity(listUrl, String.class);
         
         assertEquals(HttpStatus.OK, listResponse.getStatusCode(),
@@ -151,14 +175,14 @@ class RestEndpointIntegrationTest {
         assertNotNull(listResponse.getBody(), "Response body should not be null");
         
         // Test list policies endpoint
-        String policiesUrl = baseUrl + "/api/iam/policies";
+        String policiesUrl = baseUrl + "/api/v1/iam/policies";
         ResponseEntity<String> policiesResponse = restTemplate.getForEntity(policiesUrl, String.class);
         
         assertEquals(HttpStatus.OK, policiesResponse.getStatusCode(),
             "IAM list policies endpoint should return 200 OK");
         
         // Test list access keys endpoint
-        String keysUrl = baseUrl + "/api/iam/access-keys?userId=" + testUserId;
+        String keysUrl = baseUrl + "/api/v1/iam/users/" + testUsername + "/access-keys";
         ResponseEntity<String> keysResponse = restTemplate.getForEntity(keysUrl, String.class);
         
         assertEquals(HttpStatus.OK, keysResponse.getStatusCode(),
@@ -172,7 +196,7 @@ class RestEndpointIntegrationTest {
     @Test
     void testBillingEndpoints() {
         // Test get billing summary endpoint
-        String summaryUrl = baseUrl + "/api/billing/summary/" + testAccountId;
+        String summaryUrl = baseUrl + "/api/v1/billing/summary/" + testAccountId;
         ResponseEntity<String> summaryResponse = restTemplate.getForEntity(summaryUrl, String.class);
         
         assertEquals(HttpStatus.OK, summaryResponse.getStatusCode(),
@@ -187,7 +211,7 @@ class RestEndpointIntegrationTest {
     @Test
     void testAuditEndpoints() {
         // Test list recent audit logs endpoint
-        String auditUrl = baseUrl + "/monitoring/audit/recent";
+        String auditUrl = baseUrl + "/api/v1/monitoring/audit/recent";
         ResponseEntity<String> auditResponse = restTemplate.getForEntity(auditUrl, String.class);
         
         assertEquals(HttpStatus.OK, auditResponse.getStatusCode(),
@@ -202,7 +226,7 @@ class RestEndpointIntegrationTest {
     @Test
     void testMonitoringEndpoints() {
         // Test system metrics endpoint
-        String metricsUrl = baseUrl + "/monitoring/system";
+        String metricsUrl = baseUrl + "/api/v1/monitoring/system";
         ResponseEntity<String> metricsResponse = restTemplate.getForEntity(metricsUrl, String.class);
         
         assertEquals(HttpStatus.OK, metricsResponse.getStatusCode(),
@@ -210,7 +234,7 @@ class RestEndpointIntegrationTest {
         assertNotNull(metricsResponse.getBody(), "Response body should not be null");
         
         // Test alarms endpoint
-        String alarmsUrl = baseUrl + "/monitoring/alarms/user/" + testUserId;
+        String alarmsUrl = baseUrl + "/api/v1/monitoring/alarms/user/" + testUserId;
         ResponseEntity<String> alarmsResponse = restTemplate.getForEntity(alarmsUrl, String.class);
         
         assertEquals(HttpStatus.OK, alarmsResponse.getStatusCode(),

@@ -139,7 +139,7 @@ public class S3Panel extends JPanel {
         String userId = ApiClient.getSession().getUserId();
         SwingWorker<JsonNode, Void> w = new SwingWorker<>() {
             @Override protected JsonNode doInBackground() throws Exception {
-                return ApiClient.get("/storage/buckets/user/" + userId);
+                return ApiClient.get("/api/v1/storage/buckets/user/" + userId);
             }
             @Override protected void done() {
                 try {
@@ -168,13 +168,14 @@ public class S3Panel extends JPanel {
         selectedBucketLabel.setText("Objects in: " + bucket);
         SwingWorker<JsonNode, Void> w = new SwingWorker<>() {
             @Override protected JsonNode doInBackground() throws Exception {
-                return ApiClient.get("/storage/buckets/" + bucket + "/objects?userId=" + ApiClient.getSession().getUserId());
+                return ApiClient.get("/api/v1/storage/buckets/" + bucket + "/objects?userId=" + ApiClient.getSession().getUserId());
             }
             @Override protected void done() {
                 try {
                     objectModel.setRowCount(0);
-                    JsonNode arr = get();
-                    if (arr.isArray()) arr.forEach(n -> objectModel.addRow(new Object[]{
+                    JsonNode resp = get();
+                    JsonNode arr = resp.has("data") ? resp.get("data") : resp;
+                    if (arr != null && arr.isArray()) arr.forEach(n -> objectModel.addRow(new Object[]{
                         n.path("key").asText("—"),
                         n.path("size").asText("—"),
                         n.path("lastModified").asText("—"),
@@ -194,7 +195,7 @@ public class S3Panel extends JPanel {
         
         SwingWorker<Void, Void> w = new SwingWorker<>() {
             @Override protected Void doInBackground() throws Exception {
-                ApiClient.post("/storage/buckets?name=" + name + "&userId=" + userId, null);
+                ApiClient.post("/api/v1/storage/buckets?name=" + name + "&userId=" + userId, null);
                 return null;
             }
             @Override protected void done() { refreshBuckets(); }
@@ -212,7 +213,7 @@ public class S3Panel extends JPanel {
         if (confirm != JOptionPane.YES_OPTION) return;
         SwingWorker<Void, Void> w = new SwingWorker<>() {
             @Override protected Void doInBackground() throws Exception {
-                ApiClient.delete("/storage/buckets/" + name + "?userId=" + ApiClient.getSession().getUserId()); return null;
+                ApiClient.delete("/api/v1/storage/buckets/" + name + "?userId=" + ApiClient.getSession().getUserId()); return null;
             }
             @Override protected void done() { refreshBuckets(); }
         };

@@ -106,7 +106,7 @@ public class IamPanel extends JPanel {
         // Fetch detailed user info including policy
         SwingWorker<JsonNode, Void> w = new SwingWorker<>() {
             @Override protected JsonNode doInBackground() throws Exception {
-                return ApiClient.get("/api/iam/users/" + selectedUser);
+                return ApiClient.get("/api/v1/iam/users/" + selectedUser);
             }
             @Override protected void done() {
                 try {
@@ -124,7 +124,7 @@ public class IamPanel extends JPanel {
         String json = policyArea.getText();
         SwingWorker<Void, Void> w = new SwingWorker<>() {
             @Override protected Void doInBackground() throws Exception {
-                ApiClient.post("/api/iam/users/" + selectedUser + "/policy", Map.of("document", json));
+                ApiClient.post("/api/v1/iam/users/" + selectedUser + "/policy", Map.of("document", json));
                 return null;
             }
             @Override protected void done() {
@@ -150,7 +150,7 @@ public class IamPanel extends JPanel {
     private void refresh() {
         SwingWorker<JsonNode, Void> w = new SwingWorker<>() {
             @Override protected JsonNode doInBackground() throws Exception {
-                return ApiClient.get("/api/iam/users");
+                return ApiClient.get("/api/v1/iam/users");
             }
             @Override protected void done() {
                 try {
@@ -188,7 +188,7 @@ public class IamPanel extends JPanel {
 
         SwingWorker<Void, Void> w = new SwingWorker<>() {
             @Override protected Void doInBackground() throws Exception {
-                ApiClient.post("/auth/register", Map.of(
+                ApiClient.post("/api/v1/auth/register", Map.of(
                     "username", user.getText(),
                     "email", email.getText(),
                     "password", new String(pass.getPassword()),
@@ -210,7 +210,7 @@ public class IamPanel extends JPanel {
         if (confirm != JOptionPane.YES_OPTION) return;
         SwingWorker<Void, Void> w = new SwingWorker<>() {
             @Override protected Void doInBackground() throws Exception {
-                ApiClient.delete("/api/iam/users/by-username/" + name); return null;
+                ApiClient.delete("/api/v1/iam/users/by-username/" + name); return null;
             }
             @Override protected void done() { refresh(); }
         };
@@ -223,7 +223,7 @@ public class IamPanel extends JPanel {
         String name = (String) userModel.getValueAt(row, 0);
         SwingWorker<JsonNode, Void> w = new SwingWorker<>() {
             @Override protected JsonNode doInBackground() throws Exception {
-                return ApiClient.post("/api/iam/users/" + name + "/access-keys", null);
+                return ApiClient.post("/api/v1/iam/users/" + name + "/access-keys", null);
             }
             @Override protected void done() {
                 try {

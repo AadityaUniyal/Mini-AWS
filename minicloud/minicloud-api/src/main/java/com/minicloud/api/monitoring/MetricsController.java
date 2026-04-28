@@ -15,7 +15,7 @@ import java.util.List;
 
 @Slf4j
 @RestController
-@RequestMapping("/monitoring")
+@RequestMapping("/api/v1/monitoring")
 @RequiredArgsConstructor
 @Tag(name = "CloudWatch Metrics", description = "System performance and logging")
 public class MetricsController {
@@ -59,6 +59,31 @@ public class MetricsController {
     @Operation(summary = "Get recent logs")
     public ResponseEntity<ApiResponse<List<String>>> getLogs(@RequestParam(defaultValue = "50") int lines) {
         return ResponseEntity.ok(ApiResponse.ok(metricsService.getRecentLogs(lines)));
+    }
+
+    @GetMapping("/logs/streams/{accountId}")
+    @Operation(summary = "Get log streams for an account")
+    public ResponseEntity<ApiResponse<List<Map<String, Object>>>> getLogStreams(@PathVariable String accountId) {
+        // Mock log streams data for now
+        List<Map<String, Object>> streams = List.of(
+            Map.of("id", "stream-1", "name", "application-logs", "lastEventTime", System.currentTimeMillis()),
+            Map.of("id", "stream-2", "name", "error-logs", "lastEventTime", System.currentTimeMillis() - 3600000),
+            Map.of("id", "stream-3", "name", "access-logs", "lastEventTime", System.currentTimeMillis() - 7200000)
+        );
+        return ResponseEntity.ok(ApiResponse.ok(streams));
+    }
+
+    @GetMapping("/logs/events/{streamId}")
+    @Operation(summary = "Get log events for a specific stream")
+    public ResponseEntity<ApiResponse<List<Map<String, Object>>>> getLogEvents(@PathVariable String streamId) {
+        // Mock log events data for now
+        List<Map<String, Object>> events = List.of(
+            Map.of("timestamp", System.currentTimeMillis(), "message", "Application started successfully"),
+            Map.of("timestamp", System.currentTimeMillis() - 60000, "message", "Processing user request"),
+            Map.of("timestamp", System.currentTimeMillis() - 120000, "message", "Database connection established"),
+            Map.of("timestamp", System.currentTimeMillis() - 180000, "message", "Cache initialized")
+        );
+        return ResponseEntity.ok(ApiResponse.ok(events));
     }
 
     @PostMapping("/events")

@@ -12,7 +12,7 @@ import org.springframework.web.bind.annotation.*;
 import java.util.List;
 
 @RestController
-@RequestMapping("/monitoring/audit")
+@RequestMapping("/api/v1/monitoring/audit")
 @RequiredArgsConstructor
 @Tag(name = "CloudTrail Audit Logs", description = "Global activity tracking")
 public class AuditLogController {

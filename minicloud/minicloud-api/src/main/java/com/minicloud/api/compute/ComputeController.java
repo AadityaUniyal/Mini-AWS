@@ -13,7 +13,7 @@ import java.util.List;
 import java.util.UUID;
 
 @RestController
-@RequestMapping("/api/compute/instances")
+@RequestMapping("/api/v1/compute/instances")
 @RequiredArgsConstructor
 @Tag(name = "EC2 Compute", description = "Virtual servers management")
 public class ComputeController {

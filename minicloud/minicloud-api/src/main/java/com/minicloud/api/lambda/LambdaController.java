@@ -37,7 +37,7 @@ import java.util.stream.Collectors;
  */
 @Slf4j
 @RestController
-@RequestMapping("/lambda")
+@RequestMapping("/api/v1/lambda")
 @RequiredArgsConstructor
 @Tag(name = "MiniLambda", description = "Serverless function execution (AWS Lambda equivalent)")
 public class LambdaController {

@@ -15,7 +15,7 @@ import java.util.List;
 import java.util.Map;
 
 @RestController
-@RequestMapping("/api/billing")
+@RequestMapping("/api/v1/billing")
 @Tag(name = "Billing", description = "AWS-style Billing & Cost Management")
 @RequiredArgsConstructor
 public class BillingController {

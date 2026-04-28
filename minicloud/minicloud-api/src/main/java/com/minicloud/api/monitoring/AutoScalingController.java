@@ -23,7 +23,7 @@ import java.util.Map;
  *  PUT  /scaling/{service}/replicas → manually set replica count (admin)
  */
 @RestController
-@RequestMapping("/scaling")
+@RequestMapping("/api/v1/scaling")
 @RequiredArgsConstructor
 @Tag(name = "Auto-Scaling", description = "Horizontal scaling engine — replica management and metrics")
 public class AutoScalingController {

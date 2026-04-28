@@ -175,7 +175,7 @@ public class IamService {
                 .username(user.getUsername())
                 .email(user.getEmail())
                 .accountId(user.getAccountId())
-                .role(user.getRole().name())
+                .role(user.getRole() != null ? user.getRole().name() : "UNKNOWN")
                 .rootUser(Boolean.TRUE.equals(user.getRootUser()))
                 .inlinePolicy(user.getInlinePolicy())
                 .policyNames(user.getPolicies().stream()

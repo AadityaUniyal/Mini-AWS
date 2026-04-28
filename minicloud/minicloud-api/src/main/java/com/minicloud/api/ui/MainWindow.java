@@ -200,4 +200,28 @@ public class MainWindow extends JFrame {
         cardLayout.show(contentArea, "dashboard");
         return contentArea;
     }
+
+    /**
+     * Triggers a deferred refresh on all visible panels.
+     * Called after login to ensure data is fetched with a valid session.
+     */
+    public void refreshAll() {
+        // Re-build content area with fresh panels that will now have a valid session
+        contentArea.removeAll();
+        contentArea.add(new DashboardPanel(), "dashboard");
+        contentArea.add(new Ec2Panel(),       "ec2");
+        contentArea.add(new LambdaPanel(),    "lambda");
+        contentArea.add(new RdsPanel(),       "rds");
+        contentArea.add(new S3Panel(),        "s3");
+        contentArea.add(new IamPanel(),       "iam");
+        contentArea.add(new AuditPanel(),     "audit");
+        contentArea.add(new MetricsPanel(),   "metrics");
+        contentArea.add(new CloudWatchLogsPanel(), "logs");
+        contentArea.add(new VpcPanel(),       "vpc");
+        contentArea.add(new Route53Panel(),   "route53");
+        contentArea.add(new BillingPanel(),   "billing");
+        cardLayout.show(contentArea, "dashboard");
+        contentArea.revalidate();
+        contentArea.repaint();
+    }
 }

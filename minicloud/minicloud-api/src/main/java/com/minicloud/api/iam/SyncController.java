@@ -16,7 +16,7 @@ import java.util.UUID;
  * Only accessible by ADMIN role (monolith uses admin credentials to sync).
  */
 @RestController
-@RequestMapping("/iam/sync")
+@RequestMapping("/api/v1/iam/sync")
 @RequiredArgsConstructor
 @Tag(name = "Sync", description = "Internal dual-write sync endpoints for migration")
 public class SyncController {

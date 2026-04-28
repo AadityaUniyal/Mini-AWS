@@ -173,35 +173,37 @@ public class DashboardPanel extends JPanel {
     }
 
     private void refresh() {
-        SwingWorker<Void, Void> worker = new SwingWorker<>() {
-            @Override protected Void doInBackground() throws Exception {
+        if (!ApiClient.isLoggedIn()) return;
+        SwingWorker<java.util.Map<String, Object>, Void> worker = new SwingWorker<>() {
+            @Override protected java.util.Map<String, Object> doInBackground() throws Exception {
+                java.util.Map<String, Object> results = new java.util.HashMap<>();
                 try {
-                    JsonNode ec2 = ApiClient.get("/api/compute/instances");
+                    JsonNode ec2 = ApiClient.get("/api/v1/compute/instances");
                     JsonNode d = ec2.has("data") ? ec2.get("data") : ec2;
-                    if (d != null && d.isArray()) ec2CountLabel.setText(String.valueOf(d.size()));
+                    if (d != null && d.isArray()) results.put("ec2", String.valueOf(d.size()));
                 } catch (Exception ignored) {}
                 try {
-                    JsonNode s3 = ApiClient.get("/storage/buckets/user/" + ApiClient.getSession().getUserId());
+                    JsonNode s3 = ApiClient.get("/api/v1/storage/buckets/user/" + ApiClient.getSession().getUserId());
                     JsonNode d = s3.has("data") ? s3.get("data") : s3;
-                    if (d != null && d.isArray()) s3CountLabel.setText(String.valueOf(d.size()));
+                    if (d != null && d.isArray()) results.put("s3", String.valueOf(d.size()));
                 } catch (Exception ignored) {}
                 try {
-                    JsonNode rds = ApiClient.get("/rds/instances");
+                    JsonNode rds = ApiClient.get("/api/v1/rds/instances");
                     JsonNode d = rds.has("data") ? rds.get("data") : rds;
-                    if (d != null && d.isArray()) rdsCountLabel.setText(String.valueOf(d.size()));
+                    if (d != null && d.isArray()) results.put("rds", String.valueOf(d.size()));
                 } catch (Exception ignored) {}
                 try {
-                    JsonNode lam = ApiClient.get("/lambda");
+                    JsonNode lam = ApiClient.get("/api/v1/lambda");
                     JsonNode d = lam.has("data") ? lam.get("data") : lam;
-                    if (d != null && d.isArray()) lambdaCountLabel.setText(String.valueOf(d.size()));
+                    if (d != null && d.isArray()) results.put("lambda", String.valueOf(d.size()));
                 } catch (Exception ignored) {}
                 try {
-                    JsonNode m = ApiClient.get("/monitoring/metrics/current");
-                    cpuLabel.setText(String.format("%.1f%%", m.path("cpuUsage").asDouble()));
-                    memLabel.setText(String.format("%.1f%%", m.path("heapUsedPercent").asDouble()));
+                    JsonNode m = ApiClient.get("/api/v1/monitoring/metrics/current");
+                    results.put("cpu", String.format("%.1f%%", m.path("cpuUsage").asDouble()));
+                    results.put("mem", String.format("%.1f%%", m.path("heapUsedPercent").asDouble()));
                 } catch (Exception ignored) {}
                 try {
-                    JsonNode audit = ApiClient.get("/monitoring/audit?limit=8");
+                    JsonNode audit = ApiClient.get("/api/v1/monitoring/audit?limit=8");
                     JsonNode d = audit.has("data") ? audit.get("data") : audit;
                     StringBuilder sb = new StringBuilder();
                     if (d != null && d.isArray()) {
@@ -209,9 +211,21 @@ public class DashboardPanel extends JPanel {
                             e.path("timestamp").asText("").substring(0, Math.min(16, e.path("timestamp").asText("").length()))
                             + "  " + e.path("action").asText() + "\n"));
                     }
-                    auditFeed.setText(sb.toString());
+                    results.put("audit", sb.toString());
                 } catch (Exception ignored) {}
-                return null;
+                return results;
+            }
+            @Override protected void done() {
+                try {
+                    java.util.Map<String, Object> r = get();
+                    if (r.containsKey("ec2"))    ec2CountLabel.setText((String) r.get("ec2"));
+                    if (r.containsKey("s3"))     s3CountLabel.setText((String) r.get("s3"));
+                    if (r.containsKey("rds"))    rdsCountLabel.setText((String) r.get("rds"));
+                    if (r.containsKey("lambda")) lambdaCountLabel.setText((String) r.get("lambda"));
+                    if (r.containsKey("cpu"))    cpuLabel.setText((String) r.get("cpu"));
+                    if (r.containsKey("mem"))    memLabel.setText((String) r.get("mem"));
+                    if (r.containsKey("audit"))  auditFeed.setText((String) r.get("audit"));
+                } catch (Exception ignored) {}
             }
         };
         worker.execute();

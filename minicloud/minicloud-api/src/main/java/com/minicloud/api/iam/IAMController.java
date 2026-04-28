@@ -18,7 +18,7 @@ import java.util.List;
 import java.util.UUID;
 
 @RestController
-@RequestMapping("/api/iam")
+@RequestMapping("/api/v1/iam")
 @RequiredArgsConstructor
 @Tag(name = "IAM", description = "Identity & Access Management — users, policies, and access keys")
 @SecurityRequirement(name = "BearerAuth")

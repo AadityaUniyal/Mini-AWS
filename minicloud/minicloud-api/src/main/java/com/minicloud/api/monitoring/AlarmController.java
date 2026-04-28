@@ -14,7 +14,7 @@ import java.util.List;
 import java.util.UUID;
 
 @RestController
-@RequestMapping("/monitoring/alarms")
+@RequestMapping("/api/v1/monitoring/alarms")
 @RequiredArgsConstructor
 @Tag(name = "CloudWatch Alarms", description = "Metric-based threshold monitoring")
 public class AlarmController {

@@ -121,7 +121,11 @@ public class LoginDialog extends JDialog {
         styleTextField(identifierField);
 
         JButton next = createOrangeButton("Next");
-        next.addActionListener(e -> cardLayout.show(mainCardPanel, "PASSWORD"));
+        next.addActionListener(e -> {
+            // Rebuild password panel to reflect current Root/IAM radio selection
+            mainCardPanel.add(createPasswordPanel(), "PASSWORD");
+            cardLayout.show(mainCardPanel, "PASSWORD");
+        });
 
         JButton back = new JButton("Sign in as a different user");
         styleLinkButton(back);

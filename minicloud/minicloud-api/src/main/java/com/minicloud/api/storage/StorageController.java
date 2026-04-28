@@ -31,7 +31,7 @@ import java.util.stream.Collectors;
 
 @Slf4j
 @RestController
-@RequestMapping("/storage")
+@RequestMapping("/api/v1/storage")
 @RequiredArgsConstructor
 @Tag(name = "S3 Storage", description = "Buckets and Object storage operations")
 public class StorageController {

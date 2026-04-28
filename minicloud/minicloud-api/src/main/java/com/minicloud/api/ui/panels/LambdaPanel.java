@@ -89,9 +89,10 @@ public class LambdaPanel extends JPanel {
     }
 
     private void refresh() {
+        if (!ApiClient.isLoggedIn()) return;
         SwingWorker<JsonNode, Void> w = new SwingWorker<>() {
             @Override protected JsonNode doInBackground() throws Exception {
-                return ApiClient.get("/lambda");
+                return ApiClient.get("/api/v1/lambda");
             }
             @Override protected void done() {
                 try {
@@ -131,7 +132,7 @@ public class LambdaPanel extends JPanel {
 
         SwingWorker<Void, Void> w = new SwingWorker<>() {
             @Override protected Void doInBackground() throws Exception {
-                ApiClient.post("/lambda", Map.of(
+                ApiClient.post("/api/v1/lambda", Map.of(
                     "name", name.getText(),
                     "runtime", runtime.getSelectedItem().toString().toUpperCase(),
                     "handler", handler.getText(),
@@ -157,7 +158,7 @@ public class LambdaPanel extends JPanel {
         logArea.setText("Invoking " + name + "...");
         SwingWorker<JsonNode, Void> w = new SwingWorker<>() {
             @Override protected JsonNode doInBackground() throws Exception {
-                return ApiClient.post("/lambda/invoke/" + name + "/json", payload);
+                return ApiClient.post("/api/v1/lambda/invoke/" + name + "/json", payload);
             }
             @Override protected void done() {
                 try {
@@ -178,7 +179,7 @@ public class LambdaPanel extends JPanel {
         if (confirm != JOptionPane.YES_OPTION) return;
         SwingWorker<Void, Void> w = new SwingWorker<>() {
             @Override protected Void doInBackground() throws Exception {
-                ApiClient.delete("/lambda/" + name); return null;
+                ApiClient.delete("/api/v1/lambda/" + name); return null;
             }
             @Override protected void done() { refresh(); }
         };

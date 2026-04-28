@@ -15,7 +15,7 @@ import java.util.List;
 import java.util.UUID;
 
 @RestController
-@RequestMapping("/api/vpc")
+@RequestMapping("/api/v1/vpc")
 @Tag(name = "VPC", description = "VPC and Subnet Management")
 @RequiredArgsConstructor
 public class NetworkController {

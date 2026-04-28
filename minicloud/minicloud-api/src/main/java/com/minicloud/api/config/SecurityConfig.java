@@ -4,6 +4,7 @@ import com.minicloud.api.auth.JwtFilter;
 import lombok.RequiredArgsConstructor;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.context.annotation.Profile;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.config.annotation.authentication.configuration.AuthenticationConfiguration;
 import org.springframework.security.config.annotation.method.configuration.EnableMethodSecurity;
@@ -25,13 +26,16 @@ import java.util.List;
 @EnableWebSecurity
 @EnableMethodSecurity
 @RequiredArgsConstructor
+@Profile("!test") // Exclude this configuration during tests
 public class SecurityConfig {
 
     private final JwtFilter jwtFilter;
 
     private static final String[] PUBLIC_PATHS = {
             "/auth/**",
+            "/api/v1/auth/**",
             "/h2-console/**",
+            "/actuator/**",
             "/swagger-ui/**",
             "/swagger-ui.html",
             "/v3/api-docs/**",

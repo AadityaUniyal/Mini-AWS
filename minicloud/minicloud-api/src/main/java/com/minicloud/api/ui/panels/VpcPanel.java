@@ -63,7 +63,7 @@ public class VpcPanel extends JPanel {
         String accountId = ApiClient.getSession().getAccountId();
         SwingWorker<JsonNode, Void> worker = new SwingWorker<>() {
             @Override protected JsonNode doInBackground() throws Exception {
-                return ApiClient.get("/api/vpc/" + accountId);
+                return ApiClient.get("/api/v1/vpc/" + accountId);
             }
             @Override protected void done() {
                 try {

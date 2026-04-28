@@ -29,55 +29,58 @@ public class SwingLauncher {
     public static final Color AWS_BLUE       = new Color(0x3B, 0x82, 0xF6);
 
     public static void launch(ApplicationContext ctx) {
-        SwingUtilities.invokeLater(() -> {
-            try {
-                // Apply FlatLaf dark theme
-                FlatDarkLaf.setup();
+        try {
+            // 1. Setup Theme (Main thread)
+            FlatDarkLaf.setup();
+            setupUIManager();
 
-                // Override defaults with AWS palette
-                UIManager.put("Panel.background",              AWS_PANEL_BG);
-                UIManager.put("ScrollPane.background",         AWS_PANEL_BG);
-                UIManager.put("Table.background",              AWS_DARK_BG);
-                UIManager.put("Table.foreground",              AWS_TEXT);
-                UIManager.put("Table.gridColor",               AWS_BORDER);
-                UIManager.put("Table.selectionBackground",     AWS_NAVY);
-                UIManager.put("Table.selectionForeground",     Color.WHITE);
-                UIManager.put("TableHeader.background",        AWS_NAVY);
-                UIManager.put("TableHeader.foreground",        AWS_ORANGE);
-                UIManager.put("Button.background",             AWS_ORANGE);
-                UIManager.put("Button.foreground",             Color.BLACK);
-                UIManager.put("TextField.background",          AWS_DARK_BG);
-                UIManager.put("TextField.foreground",          AWS_TEXT);
-                UIManager.put("PasswordField.background",      AWS_DARK_BG);
-                UIManager.put("PasswordField.foreground",      AWS_TEXT);
-                UIManager.put("Label.foreground",              AWS_TEXT);
-                UIManager.put("TabbedPane.background",         AWS_NAVY);
-                UIManager.put("TabbedPane.selectedBackground", AWS_PANEL_BG);
-                UIManager.put("List.background",               AWS_DARK_BG);
-                UIManager.put("ComboBox.background",           AWS_DARK_BG);
-                UIManager.put("ComboBox.foreground",           AWS_TEXT);
+            // 2. Wait for Backend (Main thread - blocking here is okay)
+            showSplashAndWaitForBackend();
 
-                // Wait for backend to be fully ready
-                showSplashAndWaitForBackend();
+            // 3. Launch UI (EDT)
+            SwingUtilities.invokeLater(() -> {
+                try {
+                    LoginDialog login = new LoginDialog(null);
+                    login.setVisible(true);
+                    if (!login.isAuthenticated()) {
+                        System.exit(0);
+                    }
 
-                // Show login dialog
-                LoginDialog login = new LoginDialog(null);
-                login.setVisible(true);
-                if (!login.isAuthenticated()) {
-                    System.exit(0);
+                    MainWindow window = new MainWindow();
+                    window.setVisible(true);
+                    window.refreshAll();
+                } catch (Exception e) {
+                    e.printStackTrace();
                 }
+            });
 
-                // Open main window
-                MainWindow window = new MainWindow();
-                window.setVisible(true);
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+    }
 
-            } catch (Exception e) {
-                JOptionPane.showMessageDialog(null,
-                    "Failed to start MiniCloud UI:\n" + e.getMessage(),
-                    "Startup Error", JOptionPane.ERROR_MESSAGE);
-                e.printStackTrace();
-            }
-        });
+    private static void setupUIManager() {
+        UIManager.put("Panel.background",              AWS_PANEL_BG);
+        UIManager.put("ScrollPane.background",         AWS_PANEL_BG);
+        UIManager.put("Table.background",              AWS_DARK_BG);
+        UIManager.put("Table.foreground",              AWS_TEXT);
+        UIManager.put("Table.gridColor",               AWS_BORDER);
+        UIManager.put("Table.selectionBackground",     AWS_NAVY);
+        UIManager.put("Table.selectionForeground",     Color.WHITE);
+        UIManager.put("TableHeader.background",        AWS_NAVY);
+        UIManager.put("TableHeader.foreground",        AWS_ORANGE);
+        UIManager.put("Button.background",             AWS_ORANGE);
+        UIManager.put("Button.foreground",             Color.BLACK);
+        UIManager.put("TextField.background",          AWS_DARK_BG);
+        UIManager.put("TextField.foreground",          AWS_TEXT);
+        UIManager.put("PasswordField.background",      AWS_DARK_BG);
+        UIManager.put("PasswordField.foreground",      AWS_TEXT);
+        UIManager.put("Label.foreground",              AWS_TEXT);
+        UIManager.put("TabbedPane.background",         AWS_NAVY);
+        UIManager.put("TabbedPane.selectedBackground", AWS_PANEL_BG);
+        UIManager.put("List.background",               AWS_DARK_BG);
+        UIManager.put("ComboBox.background",           AWS_DARK_BG);
+        UIManager.put("ComboBox.foreground",           AWS_TEXT);
     }
 
     private static void showSplashAndWaitForBackend() {
