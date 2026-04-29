@@ -8,8 +8,7 @@ import javax.swing.*;
 import javax.swing.border.EmptyBorder;
 import javax.swing.table.DefaultTableModel;
 import java.awt.*;
-import java.util.Timer;
-import java.util.TimerTask;
+import javax.swing.Timer;
 import javax.swing.SwingWorker;
 
 /**
@@ -116,10 +115,15 @@ public class AuditPanel extends JPanel {
     }
 
     private void startAutoRefresh() {
-        autoRefresh = new Timer(true);
-        autoRefresh.scheduleAtFixedRate(new TimerTask() {
-            @Override public void run() { SwingUtilities.invokeLater(AuditPanel.this::refresh); }
-        }, 10000, 10000);
+        autoRefresh = new Timer(10000, e -> refresh());
+        autoRefresh.setInitialDelay(10000);
+        autoRefresh.start();
+    }
+
+    @Override
+    public void removeNotify() {
+        super.removeNotify();
+        if (autoRefresh != null) autoRefresh.stop();
     }
 
     private JButton btn(String text, Color bg, Runnable action) {

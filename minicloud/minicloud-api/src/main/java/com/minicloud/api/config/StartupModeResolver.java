@@ -31,7 +31,7 @@ public class StartupModeResolver {
             }
         }
         
-        // Default mode is WEB
-        return StartupMode.WEB;
+        // Default mode is DESKTOP — always open Swing UI unless explicitly told otherwise
+        return StartupMode.DESKTOP;
     }
 }

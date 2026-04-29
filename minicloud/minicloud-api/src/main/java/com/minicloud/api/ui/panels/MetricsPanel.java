@@ -7,8 +7,8 @@ import com.minicloud.api.ui.SwingLauncher;
 import javax.swing.*;
 import javax.swing.border.EmptyBorder;
 import java.awt.*;
-import java.util.Timer;
-import java.util.TimerTask;
+import javax.swing.Timer;
+import javax.swing.SwingWorker;
 
 /**
  * CloudWatch Metrics Panel — live-updating bar charts and metric cards.
@@ -121,15 +121,29 @@ public class MetricsPanel extends JPanel {
     }
 
     private void startRefresh() {
-        timer = new Timer(true);
-        timer.scheduleAtFixedRate(new TimerTask() {
-            @Override public void run() {
+        timer = new Timer(3000, e -> loadDataInBackground());
+        timer.setInitialDelay(0);
+        timer.start();
+    }
+
+    private void loadDataInBackground() {
+        new SwingWorker<JsonNode, Void>() {
+            @Override protected JsonNode doInBackground() throws Exception {
+                return ApiClient.get("/api/v1/monitoring/metrics/current");
+            }
+            @Override protected void done() {
                 try {
-                    JsonNode m = ApiClient.get("/api/v1/monitoring/metrics/current");
-                    SwingUtilities.invokeLater(() -> updateUI(m));
+                    JsonNode m = get();
+                    updateUI(m);
                 } catch (Exception ignored) {}
             }
-        }, 0, 3000);
+        }.execute();
+    }
+
+    @Override
+    public void removeNotify() {
+        super.removeNotify();
+        if (timer != null) timer.stop();
     }
 
     private void updateUI(JsonNode m) {

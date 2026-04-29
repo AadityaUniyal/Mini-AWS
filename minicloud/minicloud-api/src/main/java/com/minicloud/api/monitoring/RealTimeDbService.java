@@ -64,73 +64,48 @@ public class RealTimeDbService {
     }
 
     /**
-     * Update dashboard metrics for all accounts every 5 minutes
+     * Update dashboard metrics for all accounts every 5 minutes.
+     * Each account is processed independently with its own filtered SQL query.
      */
     @Scheduled(fixedRate = 300000) // Every 5 minutes
     @Transactional
     public void updateDashboardMetrics() {
         try {
-            String sql = """
-                INSERT INTO dashboard_metrics (
-                    id, account_id, metric_date, total_instances, running_instances,
-                    total_buckets, total_objects, storage_used_gb, lambda_functions,
-                    lambda_invocations, rds_instances, daily_cost, api_requests
-                ) 
-                SELECT 
-                    ?, ci.account_id, CURRENT_DATE,
-                    COUNT(ci.id) as total_instances,
-                    COUNT(CASE WHEN ci.state = 'RUNNING' THEN 1 END) as running_instances,
-                    COALESCE(b.bucket_count, 0) as total_buckets,
-                    COALESCE(b.object_count, 0) as total_objects,
-                    COALESCE(b.storage_gb, 0) as storage_used_gb,
-                    COALESCE(l.function_count, 0) as lambda_functions,
-                    COALESCE(l.invocation_count, 0) as lambda_invocations,
-                    COALESCE(r.rds_count, 0) as rds_instances,
-                    COALESCE(cost.daily_cost, 0) as daily_cost,
-                    COALESCE(api.request_count, 0) as api_requests
-                FROM compute_instances ci
-                LEFT JOIN (
-                    SELECT account_id, COUNT(*) as bucket_count, 
-                           SUM(object_count) as object_count,
-                           SUM(total_size_bytes)/1024/1024/1024 as storage_gb
-                    FROM iam_buckets GROUP BY account_id
-                ) b ON ci.account_id = b.account_id
-                LEFT JOIN (
-                    SELECT account_id, COUNT(*) as function_count,
-                           SUM(invocation_count) as invocation_count
-                    FROM lambda_functions GROUP BY account_id
-                ) l ON ci.account_id = l.account_id
-                LEFT JOIN (
-                    SELECT account_id, COUNT(*) as rds_count
-                    FROM rds_instances GROUP BY account_id
-                ) r ON ci.account_id = r.account_id
-                LEFT JOIN (
-                    SELECT account_id, SUM(total_cost) as daily_cost
-                    FROM billing_records 
-                    WHERE CAST(created_at AS DATE) = CURRENT_DATE
-                    GROUP BY account_id
-                ) cost ON ci.account_id = cost.account_id
-                LEFT JOIN (
-                    SELECT 'ALL' as account_id, COUNT(*) as request_count
-                    FROM api_requests 
-                    WHERE CAST(timestamp AS DATE) = CURRENT_DATE
-                ) api ON 1=1
-                WHERE ci.account_id IS NOT NULL
-                GROUP BY ci.account_id
-                """;
-            
-            // Get all unique account IDs
             List<String> accountIds = jdbcTemplate.queryForList(
                 "SELECT DISTINCT account_id FROM compute_instances WHERE account_id IS NOT NULL",
                 String.class
             );
-            
+
             for (String accountId : accountIds) {
-                jdbcTemplate.update(sql, UUID.randomUUID().toString());
+                String sql = """
+                    MERGE INTO dashboard_metrics (id, account_id, metric_date,
+                        total_instances, running_instances, total_buckets,
+                        total_objects, storage_used_gb, lambda_functions,
+                        lambda_invocations, rds_instances, daily_cost)
+                    KEY(account_id, metric_date)
+                    SELECT
+                        ?, ?, CURRENT_DATE,
+                        COUNT(ci.id),
+                        COUNT(CASE WHEN ci.state = 'RUNNING' THEN 1 END),
+                        COALESCE((SELECT COUNT(*) FROM iam_buckets WHERE account_id = ?), 0),
+                        COALESCE((SELECT SUM(object_count) FROM iam_buckets WHERE account_id = ?), 0),
+                        COALESCE((SELECT SUM(total_size_bytes)/1073741824.0 FROM iam_buckets WHERE account_id = ?), 0),
+                        COALESCE((SELECT COUNT(*) FROM lambda_functions WHERE account_id = ?), 0),
+                        COALESCE((SELECT SUM(invocation_count) FROM lambda_functions WHERE account_id = ?), 0),
+                        COALESCE((SELECT COUNT(*) FROM rds_instances WHERE account_id = ?), 0),
+                        COALESCE((SELECT SUM(total_cost) FROM billing_records
+                                  WHERE account_id = ? AND CAST(created_at AS DATE) = CURRENT_DATE), 0)
+                    FROM compute_instances ci WHERE ci.account_id = ?
+                    """;
+                jdbcTemplate.update(sql,
+                    UUID.randomUUID().toString(), accountId,
+                    accountId, accountId, accountId,
+                    accountId, accountId, accountId,
+                    accountId, accountId);
             }
-            
+
             log.debug("Dashboard metrics updated for {} accounts", accountIds.size());
-            
+
         } catch (Exception e) {
             log.error("Failed to update dashboard metrics", e);
         }

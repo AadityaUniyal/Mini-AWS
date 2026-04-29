@@ -202,11 +202,12 @@ public class MainWindow extends JFrame {
     }
 
     /**
-     * Triggers a deferred refresh on all visible panels.
-     * Called after login to ensure data is fetched with a valid session.
+     * Rebuilds the entire content area with fresh panel instances.
+     * Use this only for an explicit user-triggered full refresh (e.g., re-login).
+     * Do NOT call this automatically on startup — panels are already built with
+     * a valid session by the time buildContent() runs (login precedes MainWindow creation).
      */
     public void refreshAll() {
-        // Re-build content area with fresh panels that will now have a valid session
         contentArea.removeAll();
         contentArea.add(new DashboardPanel(), "dashboard");
         contentArea.add(new Ec2Panel(),       "ec2");

@@ -48,7 +48,6 @@ public class SwingLauncher {
 
                     MainWindow window = new MainWindow();
                     window.setVisible(true);
-                    window.refreshAll();
                 } catch (Exception e) {
                     e.printStackTrace();
                 }

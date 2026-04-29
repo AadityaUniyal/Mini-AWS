@@ -122,8 +122,7 @@ public class LoginDialog extends JDialog {
 
         JButton next = createOrangeButton("Next");
         next.addActionListener(e -> {
-            // Rebuild password panel to reflect current Root/IAM radio selection
-            mainCardPanel.add(createPasswordPanel(), "PASSWORD");
+            // Just show the already-built PASSWORD card — don't recreate it
             cardLayout.show(mainCardPanel, "PASSWORD");
         });
 
@@ -144,7 +143,7 @@ public class LoginDialog extends JDialog {
 
     private JPanel createPasswordPanel() {
         JPanel card = createWhiteCard("Sign in");
-        
+
         usernameField = new JTextField();
         styleTextField(usernameField);
         passwordField = new JPasswordField();
@@ -158,15 +157,24 @@ public class LoginDialog extends JDialog {
         back.addActionListener(e -> cardLayout.show(mainCardPanel, "IDENTIFIER"));
 
         JLabel userLabel = createFieldLabel("IAM user name");
+
+        // Dynamically show/hide the IAM username field based on radio selection
+        // when this panel becomes visible, not at construction time.
+        card.addComponentListener(new java.awt.event.ComponentAdapter() {
+            @Override
+            public void componentShown(java.awt.event.ComponentEvent e) {
+                boolean isIam = iamRadio != null && iamRadio.isSelected();
+                userLabel.setVisible(isIam);
+                usernameField.setVisible(isIam);
+                card.revalidate();
+                card.repaint();
+            }
+        });
+
         card.add(Box.createVerticalStrut(10));
-        
-        // Hide/Show based on radio
-        if (iamRadio.isSelected()) {
-            card.add(userLabel);
-            card.add(usernameField);
-            card.add(Box.createVerticalStrut(15));
-        }
-        
+        card.add(userLabel);
+        card.add(usernameField);
+        card.add(Box.createVerticalStrut(15));
         card.add(createFieldLabel("Password"));
         card.add(passwordField);
         card.add(Box.createVerticalStrut(25));

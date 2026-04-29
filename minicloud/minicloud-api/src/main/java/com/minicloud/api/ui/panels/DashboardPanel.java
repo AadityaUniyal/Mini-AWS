@@ -7,8 +7,7 @@ import com.minicloud.api.ui.SwingLauncher;
 import javax.swing.*;
 import javax.swing.border.EmptyBorder;
 import java.awt.*;
-import java.util.Timer;
-import java.util.TimerTask;
+import javax.swing.Timer;
 import javax.swing.SwingWorker;
 
 /**
@@ -166,10 +165,15 @@ public class DashboardPanel extends JPanel {
     }
 
     private void scheduleRefresh() {
-        refreshTimer = new Timer(true);
-        refreshTimer.scheduleAtFixedRate(new TimerTask() {
-            @Override public void run() { SwingUtilities.invokeLater(DashboardPanel.this::refresh); }
-        }, 5000, 5000);
+        refreshTimer = new Timer(5000, e -> refresh());
+        refreshTimer.setInitialDelay(5000);
+        refreshTimer.start();
+    }
+
+    @Override
+    public void removeNotify() {
+        super.removeNotify();
+        if (refreshTimer != null) refreshTimer.stop();
     }
 
     private void refresh() {

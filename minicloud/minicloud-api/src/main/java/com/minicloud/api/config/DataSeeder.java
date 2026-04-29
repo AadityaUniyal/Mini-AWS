@@ -88,8 +88,8 @@ public class DataSeeder implements CommandLineRunner {
             log.info("  Email     : admin@minicloud.io");
             log.info("  Username  : admin");
             log.info("  Password  : admin123");
-            log.info("  Swagger  : http://localhost:8080/swagger-ui.html");
-            log.info("  H2 DB    : http://localhost:8080/h2-console");
+            log.info("  UI       : Java Swing Desktop Panel (auto-opened)");
+            log.info("  Health   : http://localhost:8080/actuator/health");
             log.info("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
         } else {
             log.info("MiniCloud API started — {} users in system", userRepository.count());

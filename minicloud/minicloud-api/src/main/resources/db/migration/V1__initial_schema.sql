@@ -311,21 +311,21 @@ CREATE TABLE IF NOT EXISTS log_events (
 );
 
 -- ── Indexes ───────────────────────────────────────────────────
-CREATE INDEX IF NOT EXISTS idx_instances_user       ON compute_instances(user_id);
-CREATE INDEX IF NOT EXISTS idx_buckets_user         ON iam_buckets(user_id);
-CREATE INDEX IF NOT EXISTS idx_objects_bucket       ON storage_objects(bucket_id);
-CREATE INDEX IF NOT EXISTS idx_functions_user       ON lambda_functions(user_id);
-CREATE INDEX IF NOT EXISTS idx_lambda_logs_fn       ON lambda_invocation_logs(function_id);
-CREATE INDEX IF NOT EXISTS idx_audit_logs_user      ON monitoring_audit_logs(user_id);
-CREATE INDEX IF NOT EXISTS idx_audit_logs_time      ON monitoring_audit_logs(timestamp);
-CREATE INDEX IF NOT EXISTS idx_alarms_user          ON monitoring_alarms(user_id);
-CREATE INDEX IF NOT EXISTS idx_access_keys_user     ON iam_access_keys(user_id);
-CREATE INDEX IF NOT EXISTS idx_rds_user             ON rds_instances(user_id);
-CREATE INDEX IF NOT EXISTS idx_vpc_subnets_vpc      ON vpc_subnets(vpc_id);
-CREATE INDEX IF NOT EXISTS idx_routes_user          ON routes(user_id);
-CREATE INDEX IF NOT EXISTS idx_log_streams_group    ON log_streams(log_group_name);
-CREATE INDEX IF NOT EXISTS idx_log_events_stream    ON log_events(log_stream_id);
-CREATE INDEX IF NOT EXISTS idx_billing_records_acct ON billing_records(account_id);
+CREATE INDEX idx_instances_user       ON compute_instances(user_id);
+CREATE INDEX idx_buckets_user         ON iam_buckets(user_id);
+CREATE INDEX idx_objects_bucket       ON storage_objects(bucket_id);
+CREATE INDEX idx_functions_user       ON lambda_functions(user_id);
+CREATE INDEX idx_lambda_logs_fn       ON lambda_invocation_logs(function_id);
+CREATE INDEX idx_audit_logs_user      ON monitoring_audit_logs(user_id);
+CREATE INDEX idx_audit_logs_time      ON monitoring_audit_logs(timestamp);
+CREATE INDEX idx_alarms_user          ON monitoring_alarms(user_id);
+CREATE INDEX idx_access_keys_user     ON iam_access_keys(user_id);
+CREATE INDEX idx_rds_user             ON rds_instances(user_id);
+CREATE INDEX idx_vpc_subnets_vpc      ON vpc_subnets(vpc_id);
+CREATE INDEX idx_routes_user          ON routes(user_id);
+CREATE INDEX idx_log_streams_group    ON log_streams(log_group_name);
+CREATE INDEX idx_log_events_stream    ON log_events(log_stream_id);
+CREATE INDEX idx_billing_records_acct ON billing_records(account_id);
 
 -- ── Route53: Hosted Zones ─────────────────────────────────────
 CREATE TABLE IF NOT EXISTS route53_hosted_zones (
@@ -349,5 +349,5 @@ CREATE TABLE IF NOT EXISTS route53_records (
     FOREIGN KEY (hosted_zone_id) REFERENCES route53_hosted_zones(id) ON DELETE CASCADE
 );
 
-CREATE INDEX IF NOT EXISTS idx_route53_zones_account ON route53_hosted_zones(account_id);
-CREATE INDEX IF NOT EXISTS idx_route53_records_zone  ON route53_records(hosted_zone_id);
+CREATE INDEX idx_route53_zones_account ON route53_hosted_zones(account_id);
+CREATE INDEX idx_route53_records_zone  ON route53_records(hosted_zone_id);

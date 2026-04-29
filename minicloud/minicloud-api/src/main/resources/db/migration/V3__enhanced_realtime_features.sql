@@ -149,19 +149,19 @@ CREATE TABLE IF NOT EXISTS dashboard_metrics (
 );
 
 -- ── Performance Indexes ──────────────────────────────────────
-CREATE INDEX IF NOT EXISTS idx_system_metrics_time     ON system_metrics(timestamp);
-CREATE INDEX IF NOT EXISTS idx_user_sessions_user      ON user_sessions(user_id);
-CREATE INDEX IF NOT EXISTS idx_user_sessions_active    ON user_sessions(is_active, last_activity);
-CREATE INDEX IF NOT EXISTS idx_resource_usage_account  ON resource_usage(account_id, resource_type);
-CREATE INDEX IF NOT EXISTS idx_resource_usage_period   ON resource_usage(period_start, period_end);
-CREATE INDEX IF NOT EXISTS idx_api_requests_user       ON api_requests(user_id, timestamp);
-CREATE INDEX IF NOT EXISTS idx_api_requests_endpoint   ON api_requests(endpoint, timestamp);
-CREATE INDEX IF NOT EXISTS idx_notifications_user      ON notifications(user_id, is_read);
-CREATE INDEX IF NOT EXISTS idx_cost_tracking_account   ON cost_tracking(account_id, billing_period);
-CREATE INDEX IF NOT EXISTS idx_service_health_service  ON service_health(service_name, last_check);
-CREATE INDEX IF NOT EXISTS idx_event_stream_type       ON event_stream(event_type, timestamp);
-CREATE INDEX IF NOT EXISTS idx_event_stream_user       ON event_stream(user_id, timestamp);
-CREATE INDEX IF NOT EXISTS idx_dashboard_metrics_acct  ON dashboard_metrics(account_id, metric_date);
+CREATE INDEX idx_system_metrics_time     ON system_metrics(timestamp);
+CREATE INDEX idx_user_sessions_user      ON user_sessions(user_id);
+CREATE INDEX idx_user_sessions_active    ON user_sessions(is_active, last_activity);
+CREATE INDEX idx_resource_usage_account  ON resource_usage(account_id, resource_type);
+CREATE INDEX idx_resource_usage_period   ON resource_usage(period_start, period_end);
+CREATE INDEX idx_api_requests_user       ON api_requests(user_id, timestamp);
+CREATE INDEX idx_api_requests_endpoint   ON api_requests(endpoint, timestamp);
+CREATE INDEX idx_notifications_user      ON notifications(user_id, is_read);
+CREATE INDEX idx_cost_tracking_account   ON cost_tracking(account_id, billing_period);
+CREATE INDEX idx_service_health_service  ON service_health(service_name, last_check);
+CREATE INDEX idx_event_stream_type       ON event_stream(event_type, timestamp);
+CREATE INDEX idx_event_stream_user       ON event_stream(user_id, timestamp);
+CREATE INDEX idx_dashboard_metrics_acct  ON dashboard_metrics(account_id, metric_date);
 
 -- ── Add missing columns to existing tables ───────────────────
 ALTER TABLE iam_users ADD COLUMN IF NOT EXISTS last_login TIMESTAMP;
@@ -242,7 +242,10 @@ CREATE VIEW live_cost_summary AS
 SELECT 
     account_id,
     SUM(CASE WHEN CAST(created_at AS DATE) = CURRENT_DATE THEN total_cost ELSE 0 END) as today_cost,
-    SUM(CASE WHEN MONTH(created_at) = MONTH(CURRENT_DATE) THEN total_cost ELSE 0 END) as month_cost,
+    SUM(CASE 
+        WHEN FORMATDATETIME(created_at, 'yyyy-MM') = FORMATDATETIME(CURRENT_DATE, 'yyyy-MM') 
+        THEN total_cost ELSE 0 
+    END) as month_cost,
     COUNT(*) as total_billing_records
 FROM billing_records
 GROUP BY account_id;
