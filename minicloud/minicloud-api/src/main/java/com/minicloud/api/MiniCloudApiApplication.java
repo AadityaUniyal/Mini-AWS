@@ -1,47 +1,37 @@
 package com.minicloud.api;
 
-import com.minicloud.api.config.StartupMode;
-import com.minicloud.api.config.StartupModeResolver;
-import com.minicloud.api.ui.SwingLauncher;
+import com.minicloud.api.ui.MainWindow;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
-import org.springframework.context.ApplicationContext;
+import org.springframework.boot.autoconfigure.security.servlet.SecurityAutoConfiguration;
 import org.springframework.context.ConfigurableApplicationContext;
 import org.springframework.scheduling.annotation.EnableScheduling;
 import org.springframework.data.jpa.repository.config.EnableJpaAuditing;
 
+import javax.swing.*;
+
 /**
- * MiniCloud — Spring Boot Application with dual-mode startup.
+ * MiniCloud — Spring Boot Desktop Application.
  *
- * <p>Supports two startup modes:</p>
+ * <p>Pure desktop mode with Java Swing UI:</p>
  * <ul>
- *   <li><b>WEB</b> (default): Pure web service mode - runs as HTTP REST API without desktop UI</li>
- *   <li><b>DESKTOP</b>: Desktop UI mode - launches Swing interface with embedded web service</li>
+ *   <li>NO WEB SERVER - No HTTP, no Tomcat, no browser</li>
+ *   <li>NO LOCALHOST - Pure desktop Java application</li>
+ *   <li>MySQL database connection ONLY (all schema in MySQL Workbench)</li>
+ *   <li>Swing UI with integrated console window</li>
  * </ul>
  *
- * <p>Startup sequence (WEB mode):</p>
+ * <p>Startup sequence:</p>
  * <ol>
- *   <li>Resolve startup mode from CLI args or environment variables</li>
- *   <li>Set java.awt.headless property to true</li>
- *   <li>Spring Boot initializes all beans, JPA, security, REST endpoints</li>
- *   <li>Log startup URLs (H2 Console, Swagger UI, Health Check)</li>
+ *   <li>Spring Boot initializes all beans, JPA, database connection</li>
+ *   <li>MainWindow Swing component is created</li>
+ *   <li>Swing window opens on the Event Dispatch Thread</li>
+ *   <li>User interacts with desktop UI (no browser needed)</li>
  * </ol>
- *
- * <p>Startup sequence (DESKTOP mode):</p>
- * <ol>
- *   <li>Resolve startup mode from CLI args or environment variables</li>
- *   <li>Set java.awt.headless property to false</li>
- *   <li>Spring Boot initializes all beans, JPA, security, REST endpoints</li>
- *   <li>SwingLauncher is invoked with the ApplicationContext</li>
- *   <li>Swing shows a splash screen while the backend warms up</li>
- *   <li>Login dialog appears → main AWS-styled dashboard window opens</li>
- * </ol>
- *
- * <p>Validates Requirements 1.1, 1.2, 1.3, 1.4, 1.5, 10.6</p>
  */
-@SpringBootApplication
+@SpringBootApplication(exclude = {SecurityAutoConfiguration.class})
 @EnableScheduling
 @EnableJpaAuditing
 public class MiniCloudApiApplication {
@@ -49,40 +39,45 @@ public class MiniCloudApiApplication {
     private static final Logger log = LoggerFactory.getLogger(MiniCloudApiApplication.class);
 
     public static void main(String[] args) {
-        // Resolve startup mode from CLI args or environment variables
-        StartupMode mode = StartupModeResolver.resolveMode(args);
-        log.info("Starting MiniCloud in {} mode", mode);
+        log.info("Starting MiniCloud Desktop Application...");
 
-        // Set headless property based on resolved mode
-        // WEB mode: headless=true (no GUI components)
-        // DESKTOP mode: headless=false (Swing windows can open)
-        System.setProperty("java.awt.headless", String.valueOf(mode == StartupMode.WEB));
+        // Set headless to false to allow Swing GUI
+        System.setProperty("java.awt.headless", "false");
+        
+        // Force UTF-8 encoding for Windows compatibility
+        System.setProperty("file.encoding", "UTF-8");
 
-        // Start Spring Boot application
+        // Start Spring Boot application (no web server)
         ConfigurableApplicationContext ctx =
             SpringApplication.run(MiniCloudApiApplication.class, args);
 
-        // Launch UI if in desktop mode, otherwise log web service URLs
-        if (mode == StartupMode.DESKTOP) {
-            SwingLauncher.launch(ctx);
-        } else {
-            int port = getServerPort(ctx);
-            log.info("MiniCloud web service started successfully");
-            log.info("H2 Console: http://localhost:{}/h2-console", port);
-            log.info("Swagger UI: http://localhost:{}/swagger-ui.html", port);
-            log.info("Health Check: http://localhost:{}/actuator/health", port);
-        }
-    }
-
-    /**
-     * Retrieves the server port from the application context.
-     * 
-     * <p>Defaults to 8080 if not configured.</p>
-     * 
-     * @param ctx The Spring application context
-     * @return The configured server port, or 8080 if not set
-     */
-    private static int getServerPort(ApplicationContext ctx) {
-        return ctx.getEnvironment().getProperty("server.port", Integer.class, 8080);
+        // Launch Swing UI on the Event Dispatch Thread
+        SwingUtilities.invokeLater(() -> {
+            try {
+                // Set FlatLaf dark theme if available
+                try {
+                    UIManager.setLookAndFeel("com.formdev.flatlaf.FlatDarkLaf");
+                } catch (Exception e) {
+                    log.warn("FlatLaf not available, using system look and feel");
+                    UIManager.setLookAndFeel(UIManager.getSystemLookAndFeelClassName());
+                }
+                
+                // Get MainWindow bean from Spring context and show it
+                MainWindow window = ctx.getBean(MainWindow.class);
+                window.setVisible(true);
+                
+                log.info("MiniCloud Desktop UI launched successfully");
+                window.log("Application started - Spring Boot context initialized");
+                window.log("Database connection established");
+                
+            } catch (Exception e) {
+                log.error("Failed to launch Swing UI", e);
+                JOptionPane.showMessageDialog(null,
+                    "Failed to launch UI: " + e.getMessage(),
+                    "Startup Error",
+                    JOptionPane.ERROR_MESSAGE);
+                System.exit(1);
+            }
+        });
     }
 }

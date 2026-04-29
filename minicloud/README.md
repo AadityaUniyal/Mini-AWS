@@ -1,16 +1,25 @@
-# ☁ MiniCloud
+# ☁ MiniCloud Desktop
 
-A self-hosted, AWS-equivalent cloud platform built entirely in Java. Runs as a single Spring Boot application on your laptop — no Docker, no Kubernetes, no cloud account required.
+A self-hosted, AWS-equivalent cloud platform built entirely in Java. Runs as a **pure desktop application** with Java Swing UI — no Docker, no Kubernetes, no browser, no localhost required.
 
 [![Java](https://img.shields.io/badge/Java-17-orange)](https://openjdk.org/projects/jdk/17/)
 [![Spring Boot](https://img.shields.io/badge/Spring%20Boot-3.2.5-brightgreen)](https://spring.io/projects/spring-boot)
+[![MySQL](https://img.shields.io/badge/MySQL-8.0-blue)](https://www.mysql.com/)
 [![License](https://img.shields.io/badge/License-MIT-blue)](LICENSE)
 
 ---
 
 ## What is MiniCloud?
 
-MiniCloud replicates the core AWS services as a modular monolith — one JAR, one database, one process. It ships with both a **REST API** (web service mode) and a **Swing desktop UI** (management console mode), styled after the AWS Management Console.
+MiniCloud replicates the core AWS services as a **desktop application** — one JAR, one MySQL database, one Swing window. It provides a complete AWS-style management console running entirely on your laptop.
+
+### 🎯 Key Features
+
+- **Pure Desktop Application** - No web server, no browser, no localhost
+- **Java Swing UI** - AWS-styled dark theme management console
+- **MySQL Database** - All schema managed in MySQL Workbench
+- **Integrated Console** - Real-time logging panel built into the UI
+- **Complete AWS Services** - S3, EC2, Lambda, RDS, IAM, CloudWatch, and more
 
 ### Services
 
@@ -34,35 +43,59 @@ MiniCloud replicates the core AWS services as a modular monolith — one JAR, on
 
 ## Quick Start
 
-**Requirements:** Java 17+, Maven (or use the included wrapper)
+**Requirements:** Java 17+, MySQL 8.0+, Maven (or use the included wrapper)
 
+### Step 1: Start MySQL
 ```bash
-# Clone
-git clone https://github.com/your-org/minicloud.git
-cd minicloud
+# Windows
+net start MySQL80
 
-# Start (interactive — choose WEB or DESKTOP mode)
-start.bat
+# Linux
+sudo systemctl start mysql
 
-# Or directly
+# macOS
+brew services start mysql
+```
+
+### Step 2: Setup Database
+1. Open MySQL Workbench
+2. Connect to localhost as root
+3. Open and execute: `mysql-workbench-setup.sql`
+4. Verify: `USE minicloud_db; SHOW TABLES;`
+
+### Step 3: Configure Password
+Edit `minicloud-api/src/main/resources/application.properties`:
+```properties
+spring.datasource.password=YOUR_MYSQL_ROOT_PASSWORD
+```
+
+### Step 4: Launch Desktop Application
+```bash
+# Quick launch (Windows)
+start-desktop.bat
+
+# Or manual launch
+.\mvnw.cmd clean package -DskipTests
 .\mvnw.cmd spring-boot:run -pl minicloud-api
 ```
 
-The platform starts on **http://localhost:8080** in about 10 seconds.
+The desktop window opens automatically in about 10 seconds.
+
+📖 **See [DESKTOP_QUICKSTART.md](DESKTOP_QUICKSTART.md) for detailed setup instructions**
 
 ---
 
-## Startup Modes
+## Desktop UI Features
 
-```bash
-# Headless web service (default)
-start.bat web
+The Swing management console provides:
 
-# Swing desktop UI
-start.bat desktop
-```
-
-You can also set the `MINICLOUD_MODE` environment variable to `WEB` or `DESKTOP`.
+- **🪣 S3 Buckets** - Object storage management
+- **💻 EC2 Instances** - Virtual machine lifecycle
+- **⚡ Lambda Functions** - Serverless execution
+- **🗄️ RDS Databases** - Managed database instances
+- **👤 IAM Users** - User and access management
+- **📋 Activity Logs** - CloudTrail-style audit logs
+- **🖥️ Integrated Console** - Real-time logging panel
 
 ---
 
