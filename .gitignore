@@ -15,7 +15,7 @@ minicloud-data/**
 
 # ── Logs ──────────────────────────────────────────────────────
 *.log
-logs/
+/logs/
 
 # ── IDEs ──────────────────────────────────────────────────────
 .idea/
@@ -35,6 +35,6 @@ Thumbs.db
 .reloadtrigger
 
 # ── Local config overrides ────────────────────────────────────
-config/
+/config/
 application-local.properties
 application-local.yml
