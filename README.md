@@ -1,314 +1,113 @@
-# ☁ MiniCloud Desktop
+# ☁️ MiniCloud: AWS-Equivalent Desktop Cloud Platform
 
-A self-hosted, AWS-equivalent cloud platform built entirely in Java. Runs as a **pure desktop application** with Java Swing UI — no Docker, no Kubernetes, no browser, no localhost required.
-
-[![Java](https://img.shields.io/badge/Java-17-orange)](https://openjdk.org/projects/jdk/17/)
-[![Spring Boot](https://img.shields.io/badge/Spring%20Boot-3.2.5-brightgreen)](https://spring.io/projects/spring-boot)
-[![MySQL](https://img.shields.io/badge/MySQL-8.0-blue)](https://www.mysql.com/)
-[![License](https://img.shields.io/badge/License-MIT-blue)](LICENSE)
+MiniCloud is a production-grade, self-hosted simulation of **Amazon Web Services (AWS)**. It runs entirely on your local laptop as a **Modular Monolith** using Spring Boot and Java Swing—providing a complete AWS-equivalent cloud ecosystem without any expensive remote servers or complicated infrastructure.
 
 ---
 
-## What is MiniCloud?
+## 📂 Repository & Project Structure
 
-MiniCloud replicates the core AWS services as a **desktop application** — one JAR, one MySQL database, one Swing window. It provides a complete AWS-style management console running entirely on your laptop.
-
-### 🎯 Key Features
-
-- **Pure Desktop Application** - No web server, no browser, no localhost
-- **Java Swing UI** - AWS-styled dark theme management console
-- **MySQL Database** - All schema managed in MySQL Workbench
-- **Integrated Console** - Real-time logging panel built into the UI
-- **Complete AWS Services** - S3, EC2, Lambda, RDS, IAM, CloudWatch, and more
-
-### Services
-
-| MiniCloud | AWS Equivalent |
-|-----------|---------------|
-| IAM — users, policies, access keys | AWS IAM |
-| EC2 — virtual instances + security groups | Amazon EC2 |
-| S3 — buckets, objects, static website hosting | Amazon S3 |
-| RDS — managed database instances (H2/MySQL) | Amazon RDS |
-| Lambda — serverless function execution | AWS Lambda |
-| CloudTrail — audit event log | AWS CloudTrail |
-| CloudWatch — metrics, alarms, logs | Amazon CloudWatch |
-| VPC — networks and subnets | Amazon VPC |
-| Route 53 — hosted zones and DNS records | Amazon Route 53 |
-| MiniRoute — reverse proxy with health checks | AWS ALB |
-| Auto Scaling — CPU-based replica management | AWS Auto Scaling |
-| Billing — per-minute cost accumulation | AWS Cost Explorer |
-| Multi-tenancy — quota enforcement per tenant | AWS Organizations |
-
----
-
-## Quick Start
-
-**Requirements:** Java 17+, MySQL 8.0+, Maven (or use the included wrapper)
-
-### Step 1: Start MySQL
-```bash
-# Windows
-net start MySQL80
-
-# Linux
-sudo systemctl start mysql
-
-# macOS
-brew services start mysql
-```
-
-### Step 2: Setup Database
-1. Open MySQL Workbench
-2. Connect to localhost as root
-3. Open and execute: `mysql-workbench-setup.sql`
-4. Verify: `USE minicloud_db; SHOW TABLES;`
-
-### Step 3: Configure Password
-Edit `minicloud-api/src/main/resources/application.properties`:
-```properties
-spring.datasource.password=YOUR_MYSQL_ROOT_PASSWORD
-```
-
-### Step 4: Launch Desktop Application
-```bash
-# Quick launch (Windows)
-start-desktop.bat
-
-# Or manual launch
-.\mvnw.cmd clean package -DskipTests
-.\mvnw.cmd spring-boot:run -pl minicloud-api
-```
-
-The desktop window opens automatically in about 10 seconds.
-
-📖 **See [DESKTOP_QUICKSTART.md](DESKTOP_QUICKSTART.md) for detailed setup instructions**
-
----
-
-## Desktop UI Features
-
-The Swing management console provides:
-
-- **🪣 S3 Buckets** - Object storage management
-- **💻 EC2 Instances** - Virtual machine lifecycle
-- **⚡ Lambda Functions** - Serverless execution
-- **🗄️ RDS Databases** - Managed database instances
-- **👤 IAM Users** - User and access management
-- **📋 Activity Logs** - CloudTrail-style audit logs
-- **🖥️ Integrated Console** - Real-time logging panel
-
----
-
-## Default Credentials
-
-| Field | Value |
-|-------|-------|
-| Email | `admin@minicloud.io` |
-| Password | `admin123` |
-| Account ID | `123456789012` |
-| Login type | Root user |
-
-> Change the JWT secret in `application.properties` before any real deployment.
-
----
-
-## Endpoints
-
-| URL | Description |
-|-----|-------------|
-| `http://localhost:8080` | Web Management Console |
-| `http://localhost:8080/api/v1/swagger-ui.html` | Full API documentation |
-| `http://localhost:8080/h2-console` | Database browser |
-| `http://localhost:8080/actuator/health` | Health check |
-| `http://localhost:8080/api/v1/auth/login` | Login (POST) |
-
----
-
-## API Examples
-
-**Login:**
-```bash
-curl -X POST http://localhost:8080/api/v1/auth/login \
-  -H "Content-Type: application/json" \
-  -d '{"loginType":"ROOT","email":"admin@minicloud.io","password":"admin123"}'
-```
-
-**Launch an EC2 instance:**
-```bash
-curl -X POST "http://localhost:8080/api/v1/compute/instances/launch?name=my-vm&type=T2_MICRO&userId=<userId>&accountId=123456789012" \
-  -H "Authorization: Bearer <token>"
-```
-
-**Create an S3 bucket:**
-```bash
-curl -X POST "http://localhost:8080/api/v1/storage/buckets?name=my-bucket&userId=<userId>" \
-  -H "Authorization: Bearer <token>"
-```
-
-**Upload a file:**
-```bash
-curl -X POST "http://localhost:8080/api/v1/storage/buckets/my-bucket/upload?userId=<userId>" \
-  -H "Authorization: Bearer <token>" \
-  -F "file=@myfile.txt"
-```
-
-**Deploy a Lambda function:**
-```bash
-curl -X POST http://localhost:8080/api/v1/lambda \
-  -H "Authorization: Bearer <token>" \
-  -H "Content-Type: application/json" \
-  -d '{"name":"hello","runtime":"BASH","handler":"hello.sh","memoryMb":128,"timeoutSec":10}'
-```
-
-**Invoke a Lambda function (public):**
-```bash
-curl -X POST http://localhost:8080/api/v1/lambda/invoke/hello \
-  -d '{"key":"value"}'
-```
-
----
-
-## Project Structure
+The project is organized into structured packages separating AWS simulation services, database mapping layers, and the desktop user interface.
 
 ```
-minicloud/
-├── minicloud-api/                  ← Spring Boot application
-│   ├── src/main/java/
-│   │   └── com/minicloud/api/
-│   │       ├── auth/               ← JWT filter
-│   │       ├── audit/              ← CloudTrail
-│   │       ├── billing/            ← Cost tracking
-│   │       ├── compute/            ← EC2 + security groups
-│   │       ├── config/             ← Security, JPA, cache, WebSocket
-│   │       ├── domain/             ← JPA entities + repositories
-│   │       ├── dto/                ← Request/response objects
-│   │       ├── exception/          ← Global error handling
-│   │       ├── iam/                ← Users, policies, access keys
-│   │       ├── lambda/             ← Serverless execution engine
-│   │       ├── monitoring/         ← Metrics, alarms, logs, auto-scaling
-│   │       ├── rds/                ← Managed databases
-│   │       ├── route/              ← VPC, Route53, reverse proxy
-│   │       ├── storage/            ← S3 + static website hosting
-│   │       └── ui/                 ← Swing desktop UI
+Mini-AWS/
+├── minicloud-api/                        ← Core Spring Boot Application Module
+│   ├── src/main/java/com/minicloud/api/
+│   │   ├── MiniCloudApiApplication.java  ← Main entry point (WEB / DESKTOP mode selector)
+│   │   ├── auth/                         ← Security configurations, filters & JWT utilities
+│   │   ├── audit/                        ← CloudTrail-style audit log recorder (immutable events)
+│   │   ├── billing/                      ← Cost accumulation engine & invoicing system
+│   │   ├── compute/                      ← EC2 simulation (VM manager, security groups, command sanitizer)
+│   │   ├── domain/                       ← JPA entities mapping to H2/MySQL tables
+│   │   ├── dto/                          ← REST request & response payloads
+│   │   ├── iam/                      ← IAM users, access keys, policies & PolicyEvaluator
+│   │   ├── lambda/                   ← Serverless engines (Subprocess & Docker runner)
+│   │   ├── monitoring/               ← Diagnostics, CloudWatch metrics, alarms & auto-scaling
+│   │   ├── rds/                      ← Managed H2 database instances per account
+│   │   ├── route/                    ← Network (VPC, Subnet, Route53, ProxyService, NACL)
+│   │   ├── storage/                  ← S3 bucket storage & static website hosting
+│   │   └── ui/                       ← FlatLaf-styled Java Swing Desktop UI console
 │   ├── src/main/resources/
-│   │   ├── application.properties
-│   │   ├── db/migration/           ← Flyway SQL migrations
-│   │   └── static/                 ← Web frontend
-│   └── pom.xml
-├── pom.xml                         ← Parent build
-├── mvnw / mvnw.cmd                 ← Maven wrapper
-├── start.bat                       ← Launcher script
-├── ARCHITECTURE.md                 ← Detailed architecture docs
-└── README.md                       ← This file
+│   │   ├── application.properties        ← Central application config parameters
+│   │   └── db/migration/                 ← Database migration scripts (Flyway)
+│   └── pom.xml                           ← API module Maven dependencies
+├── pom.xml                               ← Parent Maven project configuration
+├── start-desktop.bat                     ← Batch launcher script (Swing Dashboard UI)
+├── start.bat                             ← Multi-mode launcher (WEB or DESKTOP)
+├── setup-minicloud.ps1                   ← Initial setup & provisioning script
+└── LICENSE                               ← MIT License
 ```
 
 ---
 
-## Configuration
+## 🎯 Key Capabilities & Parity
 
-All configuration lives in `minicloud-api/src/main/resources/application.properties`.
+MiniCloud implements real-world AWS behaviors and patterns:
 
-**Switch to PostgreSQL:**
-```properties
-spring.datasource.url=jdbc:postgresql://localhost:5432/minicloud
-spring.datasource.username=postgres
-spring.datasource.password=yourpassword
-spring.datasource.driver-class-name=org.postgresql.Driver
-```
-
-**Switch to MySQL:**
-```properties
-spring.datasource.url=jdbc:mysql://localhost:3306/minicloud
-spring.datasource.username=root
-spring.datasource.password=yourpassword
-spring.datasource.driver-class-name=com.mysql.cj.jdbc.Driver
-```
-
-**Change JWT secret (required for production):**
-```properties
-minicloud.jwt.secret=your-very-long-secret-key-at-least-32-chars
-```
+*   **🔐 Identity & Access Management (IAM)**: Authenticate as the Root user (email) or an IAM User (12-digit Account ID + username). Evaluate access permissions using AWS-style JSON Policy documents (supporting `Effect`, `Action`, `Resource`, `Condition` blocks, and context variables like `${aws:username}`).
+*   **💻 Elastic Compute Cloud (EC2)**: Launch, stop, and terminate instance runtimes. Commands are executed inside a secure, lightweight **Docker Alpine container sandbox** with automatic fallback to local host subprocesses if Docker is inactive.
+*   **⚡ AWS Lambda**: Upload code scripts (Python, Node.js, Java, Go, Bash, etc.) and run them on-demand inside isolated Docker runtime environments (mounting directories to `/var/task`) or local interpreters.
+*   **🪣 Simple Storage Service (S3)**: Programmatically create buckets, upload/retrieve objects, and configure S3 Static Website Hosting (serving HTML documents at `/site/...`).
+*   **🌐 Virtual Private Cloud (VPC)**: Segment infrastructure across VPC CIDRs, subnets, Route 53 DNS records, and enforce security boundaries using **stateful Security Groups** and **stateless Network ACLs (NACLs)**.
+*   **📊 CloudWatch & CloudTrail**: Track real-time OS CPU/RAM sampling, configure threshold alarms, view rolling log streams, and audit every single action in immutable audit logs.
+*   **💸 Billing**: Real-time cost accumulation engine tracking compute uptime, storage footprints, and invoice generations.
 
 ---
 
-## Desktop UI
+## 🚀 Quick Start Guide
 
-Launch with `start.bat desktop` to open the Swing management console — an AWS-styled dark-theme dashboard with panels for every service.
+### 1. Prerequisites
+Ensure you have the following installed on your laptop:
+- **Java 17+** (OpenJDK)
+- **Maven** (optional, wrapper is included)
+- **Docker Desktop** (optional, recommended for sandboxing isolation)
+- **MySQL Server** (optional, default configuration runs on a file-based H2 database out of the box)
 
-The UI communicates with the embedded REST API over `localhost:8080` using JWT authentication. All panels support full CRUD operations.
+### 2. Configure Database (Optional)
+By default, the application runs on a local H2 database (`miniclouddb` files inside `minicloud-data/db`). If you prefer to run on MySQL:
+1. Open your database config, create a scheme named `minicloud_db`.
+2. Edit configuration parameters inside [application.properties](file:///c:/Users/HP/OneDrive/Desktop/MINI-AWS/Mini-AWS/minicloud-api/src/main/resources/application.properties) to point to your local MySQL datasource URL.
 
----
+### 3. Run the Platform
 
-## Data Storage
-
-Runtime data is stored under `minicloud-api/minicloud-data/`:
-
-```
-minicloud-data/
-├── db/           ← H2 database files
-├── logs/         ← Rolling application logs
-├── storage/      ← S3 object files
-├── lambda-tmp/   ← Lambda artifact cache
-└── rds/          ← Per-instance RDS databases
-```
-
----
-
-## Building a Production JAR
-
+To start the platform in **Desktop Dashboard Mode** (Java Swing GUI):
 ```bash
-.\mvnw.cmd clean package -pl minicloud-api -am -DskipTests
-java -Xmx512m -jar minicloud-api/target/minicloud-api-1.0.0.jar --mode=WEB
+# Using the launcher batch script
+./start-desktop.bat
+
+# Or run manually via maven
+./mvnw.cmd spring-boot:run -pl minicloud-api -Dspring-boot.run.arguments=--mode=DESKTOP
+```
+
+To run in **Headless Web API Mode** (accessible via Swagger):
+```bash
+./mvnw.cmd spring-boot:run -pl minicloud-api
 ```
 
 ---
 
-## Architecture
+## ⚙️ Diagnostics & Advanced Security Operations
 
+### Startup Diagnostics
+During boot, MiniCloud automatically runs the environment checker, outputting a diagnostic status block of your tools in the startup console:
 ```
-┌─────────────────────────────────────────────────────────────┐
-│                    MiniCloud Architecture                    │
-│                     (Single JVM Process)                    │
-└─────────────────────────────────────────────────────────────┘
-
-┌──────────┐   ┌──────────┐   ┌──────────────────────────┐
-│ Browser  │   │ Swing UI │   │       CLI Client         │
-│ Web UI   │   │ Desktop  │   │  (java MiniCloudCli)     │
-└────┬─────┘   └────┬─────┘   └────────────┬─────────────┘
-     │              │                       │
-     └──────────────┼───────────────────────┘
-                    │  HTTP/REST + JWT
-                    ▼
-┌──────────────────────────────────────────────┐
-│              Spring Boot 3.2                  │
-│  ┌────────┐ ┌───────┐ ┌────────┐ ┌────────┐  │
-│  │  IAM   │ │  EC2  │ │   S3   │ │ Lambda │  │
-│  │ /auth  │ │/compute│ │/storage│ │/lambda │  │
-│  └────────┘ └───────┘ └────────┘ └────────┘  │
-│  ┌────────┐ ┌───────┐ ┌────────┐ ┌────────┐  │
-│  │  RDS   │ │  VPC  │ │Billing │ │Monitor │  │
-│  │  /rds  │ │ /vpc  │ │/billing│ │/metrics│  │
-│  └────────┘ └───────┘ └────────┘ └────────┘  │
-│                                               │
-│  ┌──────────────────────────────────────┐    │
-│  │    H2 File Database (via JDBC)        │    │
-│  │    Flyway-managed schema migrations   │    │
-│  └──────────────────────────────────────┘    │
-└──────────────────────────────────────────────┘
-                    │                         │
-┌──────┴──────┐         ┌────────┴────────┐
-│ minicloud-  │         │  minicloud-     │
-│ data/db/    │         │  data/storage/  │
-│ (database)  │         │  (S3 files)     │
-└─────────────┘         └─────────────────┘
+==================================================
+         MINICLOUD ENVIRONMENT DIAGNOSTICS        
+==================================================
+  DOCKER     : ✅ ACTIVE
+  PYTHON     : ✅ ACTIVE
+  NODE       : ✅ ACTIVE
+  JAVA       : ✅ ACTIVE
+  RUBY       : ❌ INACTIVE (Fallback Mode)
+  GO         : ❌ INACTIVE (Fallback Mode)
+  DOTNET     : ❌ INACTIVE (Fallback Mode)
+==================================================
 ```
+You can query this dynamically via `GET /api/v1/diagnostics`.
 
-**Key Design Patterns:**
-- **Modular Monolith** — All AWS services in one JVM process
-- **Repository Pattern** — Spring Data JPA abstracts database access
-- **Factory Pattern** — Instance type selection and resource creation
-- **State Machine** — EC2 lifecycle (PENDING→RUNNING→STOPPED→TERMINATED)
-- **Observer Pattern** — WebSocket event broadcasting for real-time updates
-- **Strategy Pattern** — Different billing rates per resource type
+### Sandbox Command Sanitization
+Any command sent to start an EC2 instance or execute functions is automatically processed by `CommandSanitizer`. It prevents remote shell injections by blocking dangerous characters (like `;`, `&&`, `||`, backticks, `$()`).
 
-See [ARCHITECTURE.md](ARCHITECTURE.md) for the full technical architecture, database schema, security model, and service mapping.
+### Subnet NACL Enforcement
+Traffic passing through MiniRoute to your virtual resources traverses stateless subnet boundaries:
+- By default, all subnets are allocated an "Allow All" (Rule 100) NACL.
+- You can dynamically add rules (e.g. Rule 50: Deny protocol TCP, source port range 22-22 from `192.168.1.0/24`) using `NetworkAclService` to isolate subnet components.
