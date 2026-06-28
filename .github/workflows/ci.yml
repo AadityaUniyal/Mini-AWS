@@ -38,6 +38,7 @@ jobs:
 
     - name: Build and Test with Maven
       run: |
+        chmod +x mvnw
         ./mvnw clean package -DskipTests=true
 
     - name: Build Docker Image
