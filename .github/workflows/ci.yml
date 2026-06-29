@@ -14,9 +14,9 @@ jobs:
       postgres:
         image: postgres:15
         env:
-          POSTGRES_USER: neondb_owner
-          POSTGRES_PASSWORD: npg_Hohp8aYBU2sj
-          POSTGRES_DB: neondb
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: minicloud_db
         ports:
           - 5432:5432
         options: >-
