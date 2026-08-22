@@ -25,6 +25,9 @@ public class SwingLauncher {
     public static final Color AWS_BLUE       = new Color(0x3B, 0x82, 0xF6);
 
     public static void launch(ApplicationContext ctx) {
+        if (GraphicsEnvironment.isHeadless()) {
+            return;
+        }
         try {
             // 1. Setup Theme (Main thread)
             FlatDarkLaf.setup();

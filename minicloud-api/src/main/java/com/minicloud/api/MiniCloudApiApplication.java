@@ -31,6 +31,12 @@ public class MiniCloudApiApplication {
         // Resolve startup mode
         StartupMode mode = StartupModeResolver.resolveMode(args);
         
+        boolean isHeadless = Boolean.getBoolean("java.awt.headless") || java.awt.GraphicsEnvironment.isHeadless();
+        if (isHeadless && mode == StartupMode.DESKTOP) {
+            log.warn("Headless environment detected. Automatically falling back from DESKTOP mode to WEB mode.");
+            mode = StartupMode.WEB;
+        }
+        
         // Set headless conditionally based on mode (required for headless property tests)
         System.setProperty("java.awt.headless", String.valueOf(mode == StartupMode.WEB));
         

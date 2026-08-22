@@ -50,17 +50,6 @@
                 <scope>import</scope>
             </dependency>
 
-            <!-- Internal modules -->
-            <dependency>
-                <groupId>com.minicloud</groupId>
-                <artifactId>minicloud-core</artifactId>
-                <version>${project.version}</version>
-            </dependency>
-            <dependency>
-                <groupId>com.minicloud</groupId>
-                <artifactId>minicloud-domain</artifactId>
-                <version>${project.version}</version>
-            </dependency>
 
             <!-- JWT -->
             <dependency>
