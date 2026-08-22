@@ -226,6 +226,7 @@ public class MultiTenantIsolationIntegrationTest {
 
         ExecResponse res = computeService.execCommand(inst.getId(), req);
         assertNotNull(res);
+        assertNotNull(res.getStdout());
         assertTrue(res.getExitCode() == 0 || res.getStdout().contains("Hello") || !res.isTimedOut());
     }
 }

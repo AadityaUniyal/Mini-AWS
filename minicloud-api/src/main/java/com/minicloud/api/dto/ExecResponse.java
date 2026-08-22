@@ -12,8 +12,10 @@ import lombok.NoArgsConstructor;
 public class ExecResponse {
     private String instanceId;
     private int exitCode;
-    private String stdout;
-    private String stderr;
+    @Builder.Default
+    private String stdout = "";
+    @Builder.Default
+    private String stderr = "";
     private long durationMs;
     private boolean timedOut;
 }

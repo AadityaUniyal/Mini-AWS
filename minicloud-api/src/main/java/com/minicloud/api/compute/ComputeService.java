@@ -263,8 +263,8 @@ public class ComputeService {
         return ExecResponse.builder()
                 .instanceId(instanceId.toString())
                 .exitCode(result.getExitCode())
-                .stdout(result.getStdout())
-                .stderr(result.getStderr())
+                .stdout(result.getStdout() != null ? result.getStdout() : "")
+                .stderr(result.getStderr() != null ? result.getStderr() : "")
                 .durationMs(result.getDurationMs())
                 .timedOut(result.isTimedOut())
                 .build();

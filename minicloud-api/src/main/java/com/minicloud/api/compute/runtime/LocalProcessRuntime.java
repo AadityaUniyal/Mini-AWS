@@ -4,7 +4,6 @@ import com.minicloud.api.compute.CommandSanitizer;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 
-import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
 import java.util.Map;
 import java.util.UUID;
@@ -31,7 +30,7 @@ public class LocalProcessRuntime implements ComputeRuntime {
         if (isWindows) {
             pb = new ProcessBuilder("cmd.exe", "/c", sanitized);
         } else {
-            pb = new ProcessBuilder("bash", "-c", sanitized);
+            pb = new ProcessBuilder("sh", "-c", sanitized);
         }
 
         try {
@@ -90,7 +89,7 @@ public class LocalProcessRuntime implements ComputeRuntime {
         if (isWindows) {
             pb = new ProcessBuilder("cmd.exe", "/c", sanitized);
         } else {
-            pb = new ProcessBuilder("bash", "-c", sanitized);
+            pb = new ProcessBuilder("sh", "-c", sanitized);
         }
 
         try {
@@ -101,6 +100,7 @@ public class LocalProcessRuntime implements ComputeRuntime {
                 return CommandResult.builder()
                         .timedOut(true)
                         .exitCode(124)
+                        .stdout("")
                         .stderr("Command timed out after " + command.getTimeoutSeconds() + " seconds")
                         .durationMs(System.currentTimeMillis() - start)
                         .build();
@@ -111,14 +111,16 @@ public class LocalProcessRuntime implements ComputeRuntime {
 
             return CommandResult.builder()
                     .exitCode(process.exitValue())
-                    .stdout(stdout)
-                    .stderr(stderr)
+                    .stdout(stdout != null ? stdout : "")
+                    .stderr(stderr != null ? stderr : "")
                     .durationMs(System.currentTimeMillis() - start)
                     .build();
         } catch (Exception e) {
+            log.warn("Command execution failed: {}", e.getMessage());
             return CommandResult.builder()
                     .exitCode(1)
-                    .stderr("Execution error: " + e.getMessage())
+                    .stdout("")
+                    .stderr(e.getMessage() != null ? e.getMessage() : "Execution failed")
                     .durationMs(System.currentTimeMillis() - start)
                     .build();
         }
