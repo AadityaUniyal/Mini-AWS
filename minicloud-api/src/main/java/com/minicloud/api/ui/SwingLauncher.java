@@ -42,8 +42,8 @@ public class SwingLauncher {
                         System.exit(0);
                     }
 
-                    // Retrieve the fully autowired MainWindow bean from the Spring context
-                    MainWindow window = ctx.getBean(MainWindow.class);
+                    // Construct MainWindow manually
+                    MainWindow window = new MainWindow();
                     window.setVisible(true);
                 } catch (Exception e) {
                     e.printStackTrace();

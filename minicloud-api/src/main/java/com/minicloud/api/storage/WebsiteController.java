@@ -86,7 +86,7 @@ public class WebsiteController {
     private ResponseEntity<byte[]> serveObject(StorageObject obj, HttpStatus status) {
         try {
             byte[] data = obj.getContent() != null ? obj.getContent() 
-                    : storageService.readAllBytes(storageService.readObjectFromDisk(obj.getLocalPath()));
+                    : storageService.readObjectFromDisk(obj.getLocalPath());
             
             return ResponseEntity.status(status)
                     .header("Content-Type", mimeTypeResolver.resolve(obj.getObjectKey()))

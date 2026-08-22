@@ -12,7 +12,6 @@ import java.util.Date;
  * Main Swing window for MiniCloud Desktop Application.
  * Displays all services via individual tabbed panels.
  */
-@Component
 public class MainWindow extends JFrame {
     
     private JTextArea consoleArea;
@@ -72,7 +71,7 @@ public class MainWindow extends JFrame {
         add(splitPane, BorderLayout.CENTER);
         
         // ── STATUS BAR ──────────────────────────────────────────
-        JLabel statusBar = new JLabel("  ● Connected to Neon PostgreSQL (ep-wispy-lab-apla5k4t.us-east-1.aws.neon.tech)");
+        JLabel statusBar = new JLabel("  ● Connected to MiniCloud Database (Local H2)");
         statusBar.setFont(new Font("Consolas", Font.PLAIN, 12));
         statusBar.setForeground(new Color(0, 180, 100));
         statusBar.setBorder(BorderFactory.createEmptyBorder(6, 12, 6, 12));
@@ -142,6 +141,12 @@ public class MainWindow extends JFrame {
         SwingUtilities.invokeLater(() -> {
             consoleArea.append("[" + timestamp + "] " + message + "\n");
             consoleArea.setCaretPosition(consoleArea.getDocument().getLength());
+            // Limit console buffer to prevent memory leak
+            if (consoleArea.getDocument().getLength() > 500_000) {
+                try {
+                    consoleArea.getDocument().remove(0, consoleArea.getDocument().getLength() - 400_000);
+                } catch (javax.swing.text.BadLocationException ignored) {}
+            }
         });
     }
 }

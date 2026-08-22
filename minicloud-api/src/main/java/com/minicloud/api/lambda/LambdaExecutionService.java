@@ -18,6 +18,12 @@ import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
+import io.github.resilience4j.circuitbreaker.CallNotPermittedException;
+import io.github.resilience4j.circuitbreaker.CircuitBreaker;
+import io.github.resilience4j.circuitbreaker.CircuitBreakerConfig;
+import io.github.resilience4j.retry.Retry;
+import io.github.resilience4j.retry.RetryConfig;
+import java.time.Duration;
 import java.util.concurrent.*;
 
 
@@ -38,6 +44,20 @@ import java.util.concurrent.*;
 @RequiredArgsConstructor
 public class LambdaExecutionService {
 
+    private final CircuitBreaker lambdaCircuitBreaker = CircuitBreaker.of("lambdaExecution",
+            CircuitBreakerConfig.custom()
+                    .failureRateThreshold(50)
+                    .waitDurationInOpenState(Duration.ofSeconds(10))
+                    .slidingWindowSize(10)
+                    .build());
+
+    private final Retry lambdaRetry = Retry.of("lambdaExecution",
+            RetryConfig.custom()
+                    .maxAttempts(3)
+                    .waitDuration(Duration.ofSeconds(1))
+                    .retryExceptions(IOException.class, TimeoutException.class, InterruptedException.class, ExecutionException.class)
+                    .build());
+
     private final FunctionRepository functionRepository;
     private final LambdaInvocationLogRepository logRepository;
     private final ObjectMapper objectMapper;
@@ -51,6 +71,13 @@ public class LambdaExecutionService {
 
     @Value("${minicloud.lambda.tmp-dir:./minicloud-data/lambda-tmp}")
     private String lambdaTmpDir;
+
+    private final ExecutorService lambdaExecutor = Executors.newFixedThreadPool(4);
+
+    @jakarta.annotation.PreDestroy
+    public void shutdown() {
+        lambdaExecutor.shutdownNow();
+    }
 
     // ─────────────────────────── Invocation ───────────────────────────
 
@@ -72,92 +99,116 @@ public class LambdaExecutionService {
             // 1. Resolve artifact path from storage
             Path artifactPath = resolveArtifact(fn);
 
-            // 2. Build command & Execute subprocess
-            ProcessBuilder pb;
-            boolean dockerAvailable = processManager.isDockerAvailable();
-            if (dockerAvailable) {
-                log.info("Docker is running. Launching Lambda function [{}] in a sandboxed container.", fn.getName());
-                List<String> cmd = buildDockerCommand(fn, artifactPath);
-                pb = new ProcessBuilder(cmd);
-            } else {
-                log.warn("Docker NOT running. Falling back to native host process for Lambda function [{}].", fn.getName());
-                List<String> cmd = buildCommand(fn, artifactPath);
-                pb = new ProcessBuilder(cmd);
-                injectEnvironment(pb, fn);
-                pb.directory(artifactPath.getParent().toFile());
-            }
+            // Execute using decorated retry + circuit breaker
+            InvocationResult res = CircuitBreaker.decorateCallable(
+                lambdaCircuitBreaker,
+                Retry.decorateCallable(lambdaRetry, () -> runProcessAndCapture(fn, artifactPath, payload))
+            ).call();
 
-            pb.redirectErrorStream(false);
-            Process process = pb.start();
-
-            // Feed payload as stdin
-            if (payload != null && !payload.isBlank()) {
-                try (OutputStream os = process.getOutputStream()) {
-                    os.write(payload.getBytes());
-                }
-            } else {
-                process.getOutputStream().close();
-            }
-
-            // 4. Capture output concurrently with timeout
-            ExecutorService exec = Executors.newFixedThreadPool(2);
-            Future<String> stdoutFuture = exec.submit(() -> readStream(process.getInputStream()));
-            Future<String> stderrFuture = exec.submit(() -> readStream(process.getErrorStream()));
-
-            boolean finished = process.waitFor(fn.getTimeoutSec(), TimeUnit.SECONDS);
-            if (!finished) {
-                process.destroyForcibly();
-                exec.shutdownNow();
-                updateStats(fn, 124, false);
-                persistLog(fn, callerUserId, "", "Function timed out after " + fn.getTimeoutSec() + "s", 124,
-                        System.currentTimeMillis() - start, "TIMEOUT");
-                return InvocationResult.error("Function timed out after " + fn.getTimeoutSec() + "s", 124);
-            }
-
-            String stdout = stdoutFuture.get(2, TimeUnit.SECONDS);
-            String stderr = stderrFuture.get(2, TimeUnit.SECONDS);
-            exec.shutdown();
-
-            int exitCode = process.exitValue();
             long durationMs = System.currentTimeMillis() - start;
-            boolean success = exitCode == 0;
+            InvocationResult result = new InvocationResult(res.stdout(), res.stderr(), res.exitCode(), durationMs, true);
 
             // 5. Persist CloudWatch Logs
-            String logGroupName = "/aws/lambda/" + fn.getName();
-            String logStreamName = LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyy/MM/dd")) + "/[$LATEST]" + UUID.randomUUID().toString().substring(0,8);
-            String accountId = fn.getAccountId() != null ? fn.getAccountId() : "unknown";
-            var stream = logService.createOrGetStream(accountId, logGroupName, logStreamName);
-            
-            if (!stdout.isEmpty()) {
-                for (String line : stdout.split("\n")) {
-                    logService.putLogEvent(stream.getId(), line);
-                }
-            }
-            if (!stderr.isEmpty()) {
-                for (String line : stderr.split("\n")) {
-                    logService.putLogEvent(stream.getId(), "[ERROR] " + line);
-                }
-            }
+            persistCloudWatchLogs(fn, result.stdout(), result.stderr());
 
             // 6. Persist legacy invocation log
-            String status = success ? "SUCCESS" : "ERROR";
-            persistLog(fn, callerUserId, stdout, stderr, exitCode, durationMs, status);
+            persistLog(fn, callerUserId, result.stdout(), result.stderr(), result.exitCode(), durationMs, "SUCCESS");
 
             // 6. Update function statistics
-            updateStats(fn, exitCode, success);
+            updateStats(fn, result.exitCode(), true);
 
             String username = callerUserId != null
                     ? userRepository.findById(callerUserId).map(u -> u.getUsername()).orElse(callerUserId.toString())
                     : fn.getName();
             auditService.recordSuccess(username, "Lambda", "Invoke", functionName);
 
-            log.info("Lambda '{}' invoked — exit={}, duration={}ms", functionName, exitCode, durationMs);
-            return new InvocationResult(stdout, stderr, exitCode, durationMs, success);
+            log.info("Lambda '{}' invoked successfully — exit={}, duration={}ms", functionName, result.exitCode(), durationMs);
+            return result;
 
+        } catch (CallNotPermittedException e) {
+            log.error("Lambda invocation blocked by Circuit Breaker for '{}': {}", functionName, e.getMessage());
+            long durationMs = System.currentTimeMillis() - start;
+            updateStats(fn, -2, false);
+            persistLog(fn, callerUserId, "", "Circuit Breaker open. Execution blocked.", -2, durationMs, "CIRCUIT_OPEN");
+            return InvocationResult.error("Circuit Breaker is OPEN. Downstream lambda service is unavailable.", -2);
         } catch (Exception e) {
-            log.error("Lambda invocation failed for '{}': {}", functionName, e.getMessage(), e);
-            updateStats(fn, -1, false);
-            return InvocationResult.error("Invocation error: " + e.getMessage(), -1);
+            log.error("Lambda invocation failed for '{}' after resilience policies: {}", functionName, e.getMessage(), e);
+            long durationMs = System.currentTimeMillis() - start;
+            int exitCode = (e instanceof TimeoutException) ? 124 : -1;
+            String errType = (e instanceof TimeoutException) ? "TIMEOUT" : "ERROR";
+            updateStats(fn, exitCode, false);
+            persistLog(fn, callerUserId, "", e.getMessage(), exitCode, durationMs, errType);
+            return InvocationResult.error("Invocation error: " + e.getMessage(), exitCode);
+        }
+    }
+
+    private InvocationResult runProcessAndCapture(Function fn, Path artifactPath, String payload) throws Exception {
+        ProcessBuilder pb;
+        boolean dockerAvailable = processManager.isDockerAvailable();
+        if (dockerAvailable) {
+            log.info("Docker is running. Launching Lambda function [{}] in a sandboxed container.", fn.getName());
+            List<String> cmd = buildDockerCommand(fn, artifactPath);
+            pb = new ProcessBuilder(cmd);
+        } else {
+            log.warn("Docker NOT running. Falling back to native host process for Lambda function [{}].", fn.getName());
+            List<String> cmd = buildCommand(fn, artifactPath);
+            pb = new ProcessBuilder(cmd);
+            injectEnvironment(pb, fn);
+            pb.directory(artifactPath.getParent().toFile());
+        }
+
+        pb.redirectErrorStream(false);
+        Process process = pb.start();
+
+        // Capture output concurrently with timeout
+        Future<String> stdoutFuture = this.lambdaExecutor.submit(() -> readStream(process.getInputStream()));
+        Future<String> stderrFuture = this.lambdaExecutor.submit(() -> readStream(process.getErrorStream()));
+
+        // Feed payload as stdin
+        if (payload != null && !payload.isBlank()) {
+            try (OutputStream os = process.getOutputStream()) {
+                os.write(payload.getBytes());
+            }
+        } else {
+            process.getOutputStream().close();
+        }
+
+        boolean finished = process.waitFor(fn.getTimeoutSec(), TimeUnit.SECONDS);
+        if (!finished) {
+            process.destroyForcibly();
+            throw new TimeoutException("Function timed out after " + fn.getTimeoutSec() + "s");
+        }
+
+        String stdout = stdoutFuture.get(2, TimeUnit.SECONDS);
+        String stderr = stderrFuture.get(2, TimeUnit.SECONDS);
+
+        int exitCode = process.exitValue();
+        if (exitCode != 0) {
+            throw new IOException("Process failed with non-zero exit code " + exitCode + ". Stderr: " + stderr);
+        }
+
+        return new InvocationResult(stdout, stderr, exitCode, 0, true);
+    }
+
+    private void persistCloudWatchLogs(Function fn, String stdout, String stderr) {
+        try {
+            String logGroupName = "/aws/lambda/" + fn.getName();
+            String logStreamName = LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyy/MM/dd")) + "/[$LATEST]" + UUID.randomUUID().toString().substring(0,8);
+            String accountId = fn.getAccountId() != null ? fn.getAccountId() : "unknown";
+            var stream = logService.createOrGetStream(accountId, logGroupName, logStreamName);
+            
+            if (stdout != null && !stdout.isEmpty()) {
+                for (String line : stdout.split("\n")) {
+                    logService.putLogEvent(stream.getId(), line);
+                }
+            }
+            if (stderr != null && !stderr.isEmpty()) {
+                for (String line : stderr.split("\n")) {
+                    logService.putLogEvent(stream.getId(), "[ERROR] " + line);
+                }
+            }
+        } catch (Exception e) {
+            log.warn("Failed to persist CloudWatch logs: {}", e.getMessage());
         }
     }
 

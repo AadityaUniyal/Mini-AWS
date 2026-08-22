@@ -110,7 +110,7 @@ public class AutoScalingService {
             belowCount.set(0);
 
             ScalingEvent event = ScalingEvent.scaleUp(serviceName, current, newCount, cpuPercent);
-            eventHistory.add(event);
+            addEvent(event);
             log.info("AUTO-SCALE UP: {} {} → {} replicas (CPU={}%)", serviceName, current, newCount, cpuPercent);
             return new ScalingDecision(ScalingAction.SCALE_UP, current, newCount, cpuPercent, serviceName);
 
@@ -124,7 +124,7 @@ public class AutoScalingService {
                 belowCount.set(0);
 
                 ScalingEvent event = ScalingEvent.scaleDown(serviceName, current, newCount, cpuPercent);
-                eventHistory.add(event);
+                addEvent(event);
                 log.info("AUTO-SCALE DOWN: {} {} → {} replicas (CPU={}%)", serviceName, current, newCount, cpuPercent);
                 return new ScalingDecision(ScalingAction.SCALE_DOWN, current, newCount, cpuPercent, serviceName);
             }
@@ -161,8 +161,15 @@ public class AutoScalingService {
     public void setReplicaCount(String serviceName, int count) {
         int clamped = Math.min(Math.max(count, minReplicas), maxReplicas);
         replicaCounts.computeIfAbsent(serviceName, k -> new AtomicInteger(1)).set(clamped);
-        eventHistory.add(ScalingEvent.manual(serviceName, getReplicaCount(serviceName), clamped));
+        addEvent(ScalingEvent.manual(serviceName, getReplicaCount(serviceName), clamped));
         log.info("MANUAL SCALE: {} set to {} replicas", serviceName, clamped);
+    }
+
+    private void addEvent(ScalingEvent event) {
+        eventHistory.add(event);
+        while (eventHistory.size() > 1000) {
+            eventHistory.remove(0);
+        }
     }
 
     /** Get the last N scaling events across all services */

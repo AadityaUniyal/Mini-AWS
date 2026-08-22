@@ -92,11 +92,11 @@ public class MetricsService {
         if (ramHistory.size() > MAX_HISTORY) ramHistory.removeFirst();
     }
 
-    public List<Double> getCpuHistory() {
+    public synchronized List<Double> getCpuHistory() {
         return new ArrayList<>(cpuHistory);
     }
 
-    public List<Double> getRamHistory() {
+    public synchronized List<Double> getRamHistory() {
         return new ArrayList<>(ramHistory);
     }
 
@@ -105,9 +105,16 @@ public class MetricsService {
             Path logFile = Path.of("logs/minicloud.log");
             if (!Files.exists(logFile)) return List.of("Log file not found at " + logFile.toAbsolutePath());
             
-            List<String> allLines = Files.readAllLines(logFile);
-            int start = Math.max(0, allLines.size() - lines);
-            return allLines.subList(start, allLines.size());
+            try (java.util.stream.Stream<String> stream = Files.lines(logFile)) {
+                java.util.LinkedList<String> queue = new java.util.LinkedList<>();
+                stream.forEach(line -> {
+                    queue.add(line);
+                    if (queue.size() > lines) {
+                        queue.removeFirst();
+                    }
+                });
+                return new ArrayList<>(queue);
+            }
         } catch (IOException e) {
             log.error("Failed to read logs", e);
             return List.of("Error reading logs: " + e.getMessage());

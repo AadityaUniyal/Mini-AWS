@@ -1,6 +1,7 @@
 package com.minicloud.api.config;
 
 import com.minicloud.api.domain.*;
+import jakarta.transaction.Transactional;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.boot.CommandLineRunner;
@@ -23,6 +24,7 @@ public class DataSeeder implements CommandLineRunner {
     private final com.minicloud.api.route.VpcService vpcService;
 
     @Override
+    @Transactional
     public void run(String... args) throws Exception {
         seedPolicies();
         seedUsers();
@@ -87,7 +89,7 @@ public class DataSeeder implements CommandLineRunner {
             log.info("  Account ID: 123456789012");
             log.info("  Email     : admin@minicloud.io");
             log.info("  Username  : admin");
-            log.info("  Password  : admin123");
+            log.info("  Password  : ********** (see documentation)");
             log.info("  UI       : Java Swing Desktop Panel (auto-opened)");
             log.info("  Health   : http://localhost:8080/actuator/health");
             log.info("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");

@@ -23,7 +23,7 @@ public class Ec2Panel extends JPanel {
     private JTabbedPane detailsTabbedPane;
     private final Map<String, JsonNode> instanceData = new HashMap<>();
 
-    private static final String[] COLS = {"Instance ID", "Name", "Type", "Status", "Public IP", "Availability Zone"};
+    private static final String[] COLS = {"Full ID", "Instance ID", "Name", "Type", "Status", "Public IP", "Availability Zone"};
 
     public Ec2Panel() {
         setBackground(SwingLauncher.AWS_DARK_BG);
@@ -57,6 +57,7 @@ public class Ec2Panel extends JPanel {
             @Override public boolean isCellEditable(int r, int c) { return false; }
         };
         table = new JTable(tableModel);
+        table.removeColumn(table.getColumnModel().getColumn(0)); // Hidden column for full ID
         styleTable(table);
         table.getSelectionModel().addListSelectionListener(e -> updateDetails());
 
@@ -102,12 +103,13 @@ public class Ec2Panel extends JPanel {
                             String id = n.path("id").asText();
                             instanceData.put(id, n);
                             tableModel.addRow(new Object[]{
+                                id,
                                 id.substring(0, 8) + "...",
                                 n.path("name").asText("—"),
                                 n.path("type").asText("—"),
                                 n.path("state").asText("—"),
                                 n.path("publicIp").asText("—"),
-                                "us-east-1a" // Simulation
+                                n.path("availabilityZone").asText("us-east-1a")
                             });
                         }
                     }
@@ -158,12 +160,7 @@ public class Ec2Panel extends JPanel {
         int row = table.getSelectedRow();
         if (row < 0) return;
         
-        String displayId = (String) tableModel.getValueAt(row, 0);
-        // Find real ID from instanceData
-        String realId = instanceData.keySet().stream()
-                .filter(k -> k.startsWith(displayId.replace("...", "")))
-                .findFirst().orElse(null);
-        
+        String realId = (String) tableModel.getValueAt(row, 0);
         if (realId == null) return;
         
         SwingWorker<Void, Void> w = new SwingWorker<>() {
@@ -219,10 +216,7 @@ public class Ec2Panel extends JPanel {
             return;
         }
         
-        String displayId = (String) tableModel.getValueAt(row, 0);
-        String realId = instanceData.keySet().stream()
-                .filter(k -> k.startsWith(displayId.replace("...", "")))
-                .findFirst().orElse(null);
+        String realId = (String) tableModel.getValueAt(row, 0);
         
         if (realId != null) {
             JsonNode data = instanceData.get(realId);
@@ -260,9 +254,9 @@ public class Ec2Panel extends JPanel {
         p.removeAll();
         p.setLayout(new GridLayout(3, 2, 10, 10));
         
-        p.add(detailItem("VPC ID", "vpc-def12345 (default)"));
+        p.add(detailItem("VPC ID", data.path("vpcId").asText("vpc-def12345 (default)")));
         p.add(detailItem("Subnet ID", data.path("subnetId").asText("subnet-0a1b2c3d")));
-        p.add(detailItem("Network interface ID", "eni-0987654321"));
+        p.add(detailItem("Network interface ID", data.path("eniId").asText("eni-0987654321")));
         
         p.revalidate();
         p.repaint();
@@ -279,9 +273,11 @@ public class Ec2Panel extends JPanel {
         
         String[] cols = {"Type", "Protocol", "Port range", "Source"};
         DefaultTableModel m = new DefaultTableModel(cols, 0);
-        m.addRow(new Object[]{"HTTP", "TCP", "80", "0.0.0.0/0"});
-        m.addRow(new Object[]{"SSH", "TCP", "22", "0.0.0.0/0"});
-        m.addRow(new Object[]{"Custom TCP", "TCP", "8080", "172.31.0.0/16"});
+        
+        JsonNode rules = data.path("securityRules");
+        if (rules != null && rules.isArray() && rules.size() > 0) {
+            rules.forEach(r -> m.addRow(new Object[]{r.path("type").asText(), r.path("protocol").asText(), r.path("portRange").asText(), r.path("source").asText()}));
+        }
         
         JTable t = new JTable(m);
         styleTable(t);

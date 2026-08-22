@@ -81,7 +81,7 @@ public class RdsPanel extends JPanel {
                         n.path("status").asText("—"),
                         n.path("endpoint").asText("localhost"),
                         n.path("port").asText("3306"),
-                        "20"
+                        n.path("allocatedStorage").asText(n.path("storageGb").asText("20"))
                     }));
                 } catch (Exception ignored) {}
             }

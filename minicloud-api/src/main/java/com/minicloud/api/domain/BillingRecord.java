@@ -27,11 +27,11 @@ public class BillingRecord {
     private String resourceId;
     private String resourceName;
 
-    private double unitPrice; // Price per unit
+    private java.math.BigDecimal unitPrice; // Price per unit
     private String unitType;  // hour, GB-month, request
 
-    private double usageQuantity;
-    private double totalCost;
+    private java.math.BigDecimal usageQuantity;
+    private java.math.BigDecimal totalCost;
 
     private LocalDateTime startTime;
     private LocalDateTime endTime;

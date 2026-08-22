@@ -9,6 +9,7 @@ import org.springframework.stereotype.Service;
 
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.stream.Collectors;
 
 /**
@@ -44,7 +45,7 @@ public class NetworkAclService {
 
         // Lazy initialize default NACL (Allow All) for the subnet if not present
         List<NetworkAclRule> rules = subnetAcls.computeIfAbsent(subnetId, id -> {
-            List<NetworkAclRule> defaultRules = new ArrayList<>();
+            List<NetworkAclRule> defaultRules = new java.util.concurrent.CopyOnWriteArrayList<>();
             defaultRules.add(NetworkAclRule.builder()
                     .ruleNumber(100)
                     .protocol("ALL")
@@ -78,7 +79,7 @@ public class NetworkAclService {
      * Adds or updates a rule for a subnet's NACL.
      */
     public void addOrUpdateRule(UUID subnetId, NetworkAclRule rule) {
-        List<NetworkAclRule> rules = subnetAcls.computeIfAbsent(subnetId, id -> new ArrayList<>());
+        List<NetworkAclRule> rules = subnetAcls.computeIfAbsent(subnetId, id -> new java.util.concurrent.CopyOnWriteArrayList<>());
         // Remove existing rule with same rule number
         rules.removeIf(r -> r.getRuleNumber() == rule.getRuleNumber());
         rules.add(rule);

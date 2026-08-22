@@ -25,7 +25,7 @@ public class BillingController {
     @GetMapping("/summary/{accountId}")
     @Operation(summary = "Get billing summary for an account")
     public ResponseEntity<ApiResponse<Map<String, Object>>> getSummary(@PathVariable String accountId) {
-        double total = billingService.getMonthToDateEstimate(accountId);
+        java.math.BigDecimal total = billingService.getMonthToDateEstimate(accountId);
         List<BillingRecord> records = billingService.getAccountBills(accountId);
         
         Map<String, Object> response = new HashMap<>();

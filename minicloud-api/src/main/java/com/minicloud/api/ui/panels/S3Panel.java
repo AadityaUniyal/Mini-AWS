@@ -86,6 +86,12 @@ public class S3Panel extends JPanel {
         oHeader.setOpaque(false);
         oHeader.add(selectedBucketLabel, BorderLayout.WEST);
 
+        JPanel oBtns = new JPanel(new FlowLayout(FlowLayout.RIGHT, 8, 0));
+        oBtns.setOpaque(false);
+        oBtns.add(btn("Upload", SwingLauncher.AWS_ORANGE, this::uploadObject));
+        oBtns.add(btn("Download", SwingLauncher.AWS_BLUE, this::downloadObject));
+        oHeader.add(oBtns, BorderLayout.EAST);
+
         objectModel = new DefaultTableModel(OBJECT_COLS, 0) {
             @Override public boolean isCellEditable(int r, int c) { return false; }
         };
@@ -218,6 +224,57 @@ public class S3Panel extends JPanel {
             @Override protected void done() { refreshBuckets(); }
         };
         w.execute();
+    }
+
+    private void uploadObject() {
+        int row = bucketTable.getSelectedRow();
+        if (row < 0) { JOptionPane.showMessageDialog(this, "Select a bucket first."); return; }
+        String bucket = (String) bucketModel.getValueAt(row, 0);
+
+        JFileChooser fc = new JFileChooser();
+        if (fc.showOpenDialog(this) == JFileChooser.APPROVE_OPTION) {
+            java.io.File file = fc.getSelectedFile();
+            String userId = ApiClient.getSession().getUserId();
+            SwingWorker<Void, Void> w = new SwingWorker<>() {
+                @Override protected Void doInBackground() throws Exception {
+                    byte[] content = java.nio.file.Files.readAllBytes(file.toPath());
+                    String encoded = java.util.Base64.getEncoder().encodeToString(content);
+                    ApiClient.post("/api/v1/storage/buckets/" + bucket + "/objects?userId=" + userId + "&key=" + file.getName(), Map.of("contentBase64", encoded));
+                    return null;
+                }
+                @Override protected void done() { loadObjects(); }
+            };
+            w.execute();
+        }
+    }
+
+    private void downloadObject() {
+        int brow = bucketTable.getSelectedRow();
+        if (brow < 0) return;
+        String bucket = (String) bucketModel.getValueAt(brow, 0);
+
+        JTable objTable = (JTable) ((JScrollPane) ((JPanel) detailsTab.getComponentAt(0)).getComponent(1)).getViewport().getView();
+        int orow = objTable.getSelectedRow();
+        if (orow < 0) { JOptionPane.showMessageDialog(this, "Select an object first."); return; }
+        String key = (String) objectModel.getValueAt(orow, 0);
+
+        JFileChooser fc = new JFileChooser();
+        fc.setSelectedFile(new java.io.File(key));
+        if (fc.showSaveDialog(this) == JFileChooser.APPROVE_OPTION) {
+            java.io.File dest = fc.getSelectedFile();
+            String userId = ApiClient.getSession().getUserId();
+            SwingWorker<Void, Void> w = new SwingWorker<>() {
+                @Override protected Void doInBackground() throws Exception {
+                    JsonNode node = ApiClient.get("/api/v1/storage/buckets/" + bucket + "/objects/" + key + "/download?userId=" + userId);
+                    if (node.has("contentBase64")) {
+                        byte[] data = java.util.Base64.getDecoder().decode(node.get("contentBase64").asText());
+                        java.nio.file.Files.write(dest.toPath(), data);
+                    }
+                    return null;
+                }
+            };
+            w.execute();
+        }
     }
 
     private JButton btn(String text, Color bg, Runnable action) {

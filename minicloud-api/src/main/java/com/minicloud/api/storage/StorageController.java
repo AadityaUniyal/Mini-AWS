@@ -224,7 +224,7 @@ public class StorageController {
 
         InputStream stream = obj.getContent() != null 
                 ? storageService.readObject(obj.getContent())
-                : storageService.readObjectFromDisk(obj.getLocalPath());
+                : new java.io.ByteArrayInputStream(storageService.readObjectFromDisk(obj.getLocalPath()));
 
         return ResponseEntity.ok()
                 .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"" + Path.of(key).getFileName().toString() + "\"")

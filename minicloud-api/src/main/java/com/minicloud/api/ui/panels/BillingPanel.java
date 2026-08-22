@@ -63,9 +63,19 @@ public class BillingPanel extends JPanel {
         tablePanel.setOpaque(false);
         tablePanel.setBorder(new EmptyBorder(30, 0, 0, 0));
         
+        JPanel tableTitlePanel = new JPanel(new BorderLayout());
+        tableTitlePanel.setOpaque(false);
         JLabel tableTitle = new JLabel("Month-to-date top services by cost");
         tableTitle.setFont(new Font("Segoe UI", Font.BOLD, 18));
-        tablePanel.add(tableTitle, BorderLayout.NORTH);
+        tableTitlePanel.add(tableTitle, BorderLayout.WEST);
+        
+        JButton refreshBtn = new JButton("Refresh");
+        refreshBtn.setBackground(new Color(0, 103, 184));
+        refreshBtn.setForeground(Color.WHITE);
+        refreshBtn.addActionListener(e -> refreshData());
+        tableTitlePanel.add(refreshBtn, BorderLayout.EAST);
+        
+        tablePanel.add(tableTitlePanel, BorderLayout.NORTH);
 
         String[] cols = {"Service", "Resource", "Usage Type", "Usage", "Cost"};
         tableModel = new DefaultTableModel(cols, 0);
@@ -80,6 +90,9 @@ public class BillingPanel extends JPanel {
         content.add(tablePanel, BorderLayout.CENTER);
         add(content, BorderLayout.CENTER);
     }
+
+    private JLabel topServiceLabel;
+    private JLabel alertLabel;
 
     private JPanel createCostWidget() {
         JPanel card = createCard("AWS Summary");
@@ -103,12 +116,12 @@ public class BillingPanel extends JPanel {
         lbl.setFont(new Font("Segoe UI", Font.PLAIN, 13));
         lbl.setForeground(Color.GRAY);
         
-        JLabel svcLabel = new JLabel("EC2");
-        svcLabel.setFont(new Font("Segoe UI", Font.BOLD, 18));
+        topServiceLabel = new JLabel("—");
+        topServiceLabel.setFont(new Font("Segoe UI", Font.BOLD, 18));
         
         card.add(lbl);
         card.add(Box.createVerticalStrut(10));
-        card.add(svcLabel);
+        card.add(topServiceLabel);
         return card;
     }
 
@@ -118,13 +131,13 @@ public class BillingPanel extends JPanel {
         lbl.setFont(new Font("Segoe UI", Font.PLAIN, 13));
         lbl.setForeground(Color.GRAY);
         
-        JLabel okLabel = new JLabel("✓ 0 Alerts");
-        okLabel.setForeground(new Color(46, 125, 50));
-        okLabel.setFont(new Font("Segoe UI", Font.BOLD, 16));
+        alertLabel = new JLabel("✓ 0 Alerts");
+        alertLabel.setForeground(new Color(46, 125, 50));
+        alertLabel.setFont(new Font("Segoe UI", Font.BOLD, 16));
         
         card.add(lbl);
         card.add(Box.createVerticalStrut(10));
-        card.add(okLabel);
+        card.add(alertLabel);
         return card;
     }
 
@@ -159,16 +172,38 @@ public class BillingPanel extends JPanel {
                     double total = data.get("monthToDateEstimate").asDouble();
                     totalCostLabel.setText(df.format(total));
                     
+                    if (data.has("alerts") && data.get("alerts").asInt() > 0) {
+                        alertLabel.setText("⚠ " + data.get("alerts").asInt() + " Alerts");
+                        alertLabel.setForeground(Color.RED);
+                    } else {
+                        alertLabel.setText("✓ 0 Alerts");
+                        alertLabel.setForeground(new Color(46, 125, 50));
+                    }
+                    
                     tableModel.setRowCount(0);
                     JsonNode records = data.get("usageRecords");
+                    
+                    String topService = "—";
+                    double maxCost = -1;
+                    
                     for (JsonNode r : records) {
+                        double cost = r.get("totalCost").asDouble();
+                        String svc = r.get("service").asText();
+                        if (cost > maxCost) {
+                            maxCost = cost;
+                            topService = svc;
+                        }
                         tableModel.addRow(new Object[]{
-                            r.get("service").asText(),
+                            svc,
                             r.get("resourceName").asText(),
                             r.get("unitType").asText(),
                             r.get("usageQuantity").asDouble(),
-                            df.format(r.get("totalCost").asDouble())
+                            df.format(cost)
                         });
+                    }
+                    
+                    if (maxCost >= 0) {
+                        topServiceLabel.setText(topService);
                     }
                 } catch (Exception e) {
                     log.error("Failed to load billing data: {}", e.getMessage());

@@ -38,6 +38,25 @@ public class VpcPanel extends JPanel {
         actions.setOpaque(false);
         JButton createBtn = new JButton("Create VPC");
         createBtn.setBackground(SwingLauncher.AWS_ORANGE);
+        createBtn.addActionListener(e -> {
+            JTextField nameField = new JTextField("my-vpc");
+            JTextField cidrField = new JTextField("10.0.0.0/16");
+            JPanel form = new JPanel(new GridLayout(2, 2, 8, 8));
+            form.add(new JLabel("VPC Name:")); form.add(nameField);
+            form.add(new JLabel("CIDR Block:")); form.add(cidrField);
+            
+            if (JOptionPane.showConfirmDialog(this, form, "Create VPC", JOptionPane.OK_CANCEL_OPTION) == JOptionPane.OK_OPTION) {
+                String accountId = ApiClient.getSession().getAccountId();
+                SwingWorker<Void, Void> w = new SwingWorker<>() {
+                    @Override protected Void doInBackground() throws Exception {
+                        ApiClient.post("/api/v1/vpc?accountId=" + accountId + "&name=" + nameField.getText() + "&cidrBlock=" + cidrField.getText().replace("/", "%2F"), null);
+                        return null;
+                    }
+                    @Override protected void done() { refresh(); }
+                };
+                w.execute();
+            }
+        });
         actions.add(createBtn);
         header.add(actions, BorderLayout.EAST);
 

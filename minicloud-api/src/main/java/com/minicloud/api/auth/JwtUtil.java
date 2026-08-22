@@ -94,7 +94,21 @@ public class JwtUtil {
 
     public boolean extractIsRoot(String token) {
         Object isRoot = getClaims(token).get("rootUser");
-        return isRoot != null && (boolean) isRoot;
+        if (isRoot instanceof Boolean) {
+            return (Boolean) isRoot;
+        }
+        return false;
+    }
+
+    public Map<String, Object> extractAllClaims(String token) {
+        Claims claims = getClaims(token);
+        Map<String, Object> result = new HashMap<>();
+        result.put("email", claims.getSubject());
+        result.put("role", claims.get("role", String.class));
+        result.put("userId", claims.get("userId", String.class));
+        result.put("accountId", claims.get("accountId", String.class));
+        result.put("isRoot", claims.get("rootUser", Boolean.class) != null ? claims.get("rootUser", Boolean.class) : false);
+        return result;
     }
 
     public long getExpiryMs() {

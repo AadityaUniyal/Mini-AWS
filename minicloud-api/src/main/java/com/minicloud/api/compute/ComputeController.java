@@ -35,13 +35,15 @@ public class ComputeController {
     @PostMapping("/launch")
     @Operation(summary = "Launch a new virtual instance")
     public ResponseEntity<ApiResponse<Task>> launch(
-            @RequestParam String name,
-            @RequestParam String type,
             @RequestParam UUID userId,
             @RequestParam String accountId,
             @RequestParam(required = false) UUID subnetId,
-            @RequestParam(required = false) UUID securityGroupId,
-            @RequestParam(required = false) String command) {
+            @jakarta.validation.Valid @RequestBody com.minicloud.api.dto.InstanceRequest request) {
+
+        String name = request.getName();
+        String type = request.getType();
+        UUID securityGroupId = request.getSecurityGroupId() != null ? UUID.fromString(request.getSecurityGroupId()) : null;
+        String command = request.getCommand();
 
         // Create background task
         Task task = taskService.createTask("INSTANCE_LAUNCH", "Launching virtual instance: " + name, userId, accountId);

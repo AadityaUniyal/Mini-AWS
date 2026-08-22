@@ -178,8 +178,7 @@ public class RdsService {
         String url = String.format("jdbc:h2:tcp://localhost:%d/%s", inst.getPort(), inst.getDbName());
         try (Connection conn = DriverManager.getConnection(url, "sa", "")) {
             try (Statement stmt = conn.createStatement()) {
-                stmt.execute(String.format("CREATE USER IF NOT EXISTS %s PASSWORD '%s' ADMIN", 
-                        inst.getMasterUsername(), inst.getMasterPassword()));
+                stmt.execute("CREATE USER IF NOT EXISTS \"" + inst.getMasterUsername().replaceAll("[^a-zA-Z0-9_]", "") + "\" PASSWORD '" + inst.getMasterPassword().replace("'", "''") + "' ADMIN");
             }
         } catch (Exception e) {
             log.error("Failed to initialize RDS database: {}", e.getMessage());
@@ -203,5 +202,10 @@ public class RdsService {
     @PreDestroy
     public void cleanup() {
         log.info("RDS Service cleanup...");
+        rdsRepository.findAll().forEach(inst -> {
+            if (inst.getPid() != null) {
+                processManager.terminateProcess(inst.getPid());
+            }
+        });
     }
 }

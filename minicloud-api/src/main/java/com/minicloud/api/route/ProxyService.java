@@ -52,9 +52,28 @@ public class ProxyService {
      * Constructs and sends a forwarded HTTP request to the backend.
      * Returns a ProxyResponse wrapping status code, headers, and body bytes.
      */
+    private static final java.util.Set<String> BLOCKED_HOSTS = java.util.Set.of(
+        "127.0.0.1", "localhost", "0.0.0.0", "169.254.169.254", "::1"
+    );
+
+    private boolean isBlockedTarget(String host) {
+        if (BLOCKED_HOSTS.contains(host.toLowerCase())) return true;
+        try {
+            InetAddress addr = InetAddress.getByName(host);
+            return addr.isLoopbackAddress() || addr.isLinkLocalAddress() || addr.isSiteLocalAddress();
+        } catch (Exception e) {
+            return true; // Block unknown hosts
+        }
+    }
+
     public ProxyResponse forward(Route route, String path, String method,
                                   java.util.Map<String, List<String>> incomingHeaders,
                                   byte[] body) {
+
+        if (isBlockedTarget(route.getTargetHost())) {
+            log.warn("Proxy access BLOCKED by SSRF prevention for target: {}", route.getTargetHost());
+            return ProxyResponse.error(403, "Forbidden — SSRF blocked");
+        }
 
         // ── Network ACL (NACL) & Security Group Enforcement ──
         java.util.UUID subnetId = null;

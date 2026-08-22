@@ -139,8 +139,12 @@ public class TaskPanel extends JPanel {
     private void connectWebSocket() {
         HttpClient client = HttpClient.newHttpClient();
         CompletableFutureListener listener = new CompletableFutureListener();
+        
+        String baseUrl = System.getProperty("minicloud.api.url", System.getenv().getOrDefault("MINICLOUD_API_URL", "http://localhost:8080"));
+        String wsUrl = baseUrl.replace("http://", "ws://").replace("https://", "wss://") + "/ws-events/tasks";
+        
         client.newWebSocketBuilder()
-                .buildAsync(URI.create("ws://localhost:8080/ws-events/tasks"), listener)
+                .buildAsync(URI.create(wsUrl), listener)
                 .thenAccept(ws -> this.webSocket = ws);
     }
 

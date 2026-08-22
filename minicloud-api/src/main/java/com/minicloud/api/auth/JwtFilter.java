@@ -31,9 +31,12 @@ public class JwtFilter extends OncePerRequestFilter {
         String token = extractTokenFromRequest(request);
 
         if (StringUtils.hasText(token) && jwtUtil.validateToken(token)) {
-            String username = jwtUtil.extractUsername(token);
-            String role = jwtUtil.extractRole(token);
-            String userId = jwtUtil.extractUserId(token);
+            java.util.Map<String, Object> claims = jwtUtil.extractAllClaims(token);
+            String username = (String) claims.get("email");
+            String role = (String) claims.get("role");
+            String userIdStr = (String) claims.get("userId");
+            String accountId = (String) claims.get("accountId");
+            boolean isRoot = claims.containsKey("isRoot") && (Boolean) claims.get("isRoot");
 
             if (username != null && SecurityContextHolder.getContext().getAuthentication() == null) {
                 java.util.List<SimpleGrantedAuthority> authorities = new java.util.ArrayList<>();
@@ -41,7 +44,16 @@ public class JwtFilter extends OncePerRequestFilter {
                     authorities.add(new SimpleGrantedAuthority("ROLE_" + role));
                 }
 
-                UserPrincipal principal = new UserPrincipal(username, userId != null ? UUID.fromString(userId) : null);
+                UUID userId = null;
+                try {
+                    if (userIdStr != null) {
+                        userId = UUID.fromString(userIdStr);
+                    }
+                } catch (IllegalArgumentException e) {
+                    log.warn("Invalid userId format in token", e);
+                }
+
+                UserPrincipal principal = new UserPrincipal(username, userId, accountId, role, isRoot);
                 
                 UsernamePasswordAuthenticationToken authentication =
                         new UsernamePasswordAuthenticationToken(principal, null, authorities);

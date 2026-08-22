@@ -21,9 +21,9 @@ public class BillingService {
     private final BucketRepository bucketRepository;
 
     // Pricing Constants (Simulation)
-    private static final double PRICE_EC2_HOUR = 0.05;
-    private static final double PRICE_RDS_HOUR = 0.10;
-    private static final double PRICE_S3_GB_MONTH = 0.02;
+    private static final java.math.BigDecimal PRICE_EC2_HOUR = new java.math.BigDecimal("0.05");
+    private static final java.math.BigDecimal PRICE_RDS_HOUR = new java.math.BigDecimal("0.10");
+    private static final java.math.BigDecimal PRICE_S3_GB_MONTH = new java.math.BigDecimal("0.02");
 
     /**
      * Accumulate costs for running resources every minute.
@@ -34,29 +34,40 @@ public class BillingService {
     public void accumulateCosts() {
         log.debug("Billing task: Accumulating hourly costs...");
 
+        java.math.BigDecimal minutesInHour = new java.math.BigDecimal("60");
+        java.math.BigDecimal usageQty = java.math.BigDecimal.ONE.divide(minutesInHour, 10, java.math.RoundingMode.HALF_UP);
+
         // 1. EC2 Instances (Running)
         List<Instance> instances = instanceRepository.findByState(InstanceState.RUNNING);
         for (Instance inst : instances) {
             if (inst.getAccountId() == null) continue;
-            recordUsage(inst.getAccountId(), "EC2", inst.getId().toString(), inst.getName(), PRICE_EC2_HOUR / 60.0, "hour");
+            
+            double hourlyRate = inst.getType() != null ? inst.getType().getCostPerHour() : 0.05;
+            java.math.BigDecimal priceEc2Hour = new java.math.BigDecimal(String.valueOf(hourlyRate));
+            java.math.BigDecimal cost = priceEc2Hour.divide(minutesInHour, 10, java.math.RoundingMode.HALF_UP);
+            recordUsage(inst.getAccountId(), "EC2", inst.getId().toString(), inst.getName(), cost, "hour", usageQty);
         }
 
         // 2. RDS Instances (Running)
         List<RdsInstance> rdsInstances = rdsRepository.findAll();
         for (RdsInstance rds : rdsInstances) {
-            if (rds.getAccountId() == null) continue;
-            recordUsage(rds.getAccountId(), "RDS", rds.getId().toString(), rds.getName(), PRICE_RDS_HOUR / 60.0, "hour");
+            if (rds.getAccountId() == null || !"RUNNING".equalsIgnoreCase(rds.getStatus())) continue;
+            java.math.BigDecimal cost = PRICE_RDS_HOUR.divide(minutesInHour, 10, java.math.RoundingMode.HALF_UP);
+            recordUsage(rds.getAccountId(), "RDS", rds.getId().toString(), rds.getName(), cost, "hour", usageQty);
         }
 
         // 3. S3 Storage (Total GB)
         List<Bucket> buckets = bucketRepository.findAll();
+        java.math.BigDecimal minsInMonth = new java.math.BigDecimal(30 * 24 * 60);
         for (Bucket b : buckets) {
             if (b.getAccountId() == null) continue;
-            recordUsage(b.getAccountId(), "S3", b.getId().toString(), b.getName(), PRICE_S3_GB_MONTH / (30 * 24 * 60.0), "GB-month");
+            java.math.BigDecimal cost = PRICE_S3_GB_MONTH.divide(minsInMonth, 10, java.math.RoundingMode.HALF_UP);
+            java.math.BigDecimal s3Usage = java.math.BigDecimal.ONE.divide(minsInMonth, 10, java.math.RoundingMode.HALF_UP);
+            recordUsage(b.getAccountId(), "S3", b.getId().toString(), b.getName(), cost, "GB-month", s3Usage);
         }
     }
 
-    private void recordUsage(String accountId, String service, String resId, String resName, double cost, String unit) {
+    private void recordUsage(String accountId, String service, String resId, String resName, java.math.BigDecimal cost, String unit, java.math.BigDecimal usageQty) {
         BillingRecord record = BillingRecord.builder()
                 .accountId(accountId)
                 .service(service)
@@ -64,7 +75,7 @@ public class BillingService {
                 .resourceName(resName)
                 .unitPrice(cost) // Incremental cost for this minute
                 .unitType(unit)
-                .usageQuantity(1.0 / 60.0) // 1 minute of an hour
+                .usageQuantity(usageQty)
                 .totalCost(cost)
                 .startTime(LocalDateTime.now().minusMinutes(1))
                 .endTime(LocalDateTime.now())
@@ -76,9 +87,12 @@ public class BillingService {
         return billingRecordRepository.findByAccountId(accountId);
     }
 
-    public double getMonthToDateEstimate(String accountId) {
+    public java.math.BigDecimal getMonthToDateEstimate(String accountId) {
+        LocalDateTime startOfMonth = LocalDateTime.now().withDayOfMonth(1).toLocalDate().atStartOfDay();
         return billingRecordRepository.findByAccountId(accountId).stream()
-                .mapToDouble(BillingRecord::getTotalCost)
-                .sum();
+                .filter(r -> r.getStartTime() != null && !r.getStartTime().isBefore(startOfMonth))
+                .map(BillingRecord::getTotalCost)
+                .filter(java.util.Objects::nonNull)
+                .reduce(java.math.BigDecimal.ZERO, java.math.BigDecimal::add);
     }
 }

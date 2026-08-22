@@ -21,7 +21,8 @@ import java.util.Map;
 @Slf4j
 public class ApiClient {
 
-    private static final String BASE_URL = "http://localhost:8080";
+    private static final String BASE_URL = System.getProperty("minicloud.api.url", 
+        System.getenv().getOrDefault("MINICLOUD_API_URL", "http://localhost:8080"));
     private static final ObjectMapper mapper = new ObjectMapper();
     private static UserSession session = null;
 

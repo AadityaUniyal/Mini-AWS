@@ -136,6 +136,7 @@ public class LambdaPanel extends JPanel {
                     "name", name.getText(),
                     "runtime", runtime.getSelectedItem().toString().toUpperCase(),
                     "handler", handler.getText(),
+                    "code", code.getText(),
                     "description", "Created via console",
                     "memoryMb", 128,
                     "timeoutSec", 30
@@ -158,7 +159,9 @@ public class LambdaPanel extends JPanel {
         logArea.setText("Invoking " + name + "...");
         SwingWorker<JsonNode, Void> w = new SwingWorker<>() {
             @Override protected JsonNode doInBackground() throws Exception {
-                return ApiClient.post("/api/v1/lambda/invoke/" + name + "/json", payload);
+                com.fasterxml.jackson.databind.ObjectMapper mapper = new com.fasterxml.jackson.databind.ObjectMapper();
+                JsonNode payloadNode = mapper.readTree(payload);
+                return ApiClient.post("/api/v1/lambda/invoke/" + name + "/json", payloadNode);
             }
             @Override protected void done() {
                 try {

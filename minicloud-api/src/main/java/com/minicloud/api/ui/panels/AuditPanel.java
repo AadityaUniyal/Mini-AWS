@@ -99,7 +99,7 @@ public class AuditPanel extends JPanel {
                             n.path("action").asText("—"),
                             n.path("service").asText("") + " " + n.path("resource").asText(""),
                             n.path("status").asText("—"),
-                            "127.0.0.1"
+                            n.path("sourceIp").asText(n.path("ipAddress").asText("127.0.0.1"))
                         }));
                         eventCountLabel.setText(arr.size() + " events");
                     }

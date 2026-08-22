@@ -11,6 +11,7 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import jakarta.validation.Valid;
 import org.springframework.web.bind.annotation.*;
 
 @RestController
@@ -18,19 +19,18 @@ import org.springframework.web.bind.annotation.*;
 @RequiredArgsConstructor
 @Tag(name = "Authentication", description = "Login and registration endpoints")
 public class AuthController {
-
     private final AuthService authService;
 
     @PostMapping("/login")
     @Operation(summary = "Login and obtain JWT token")
-    public ResponseEntity<ApiResponse<LoginResponse>> login(@RequestBody LoginRequest request) {
+    public ResponseEntity<ApiResponse<LoginResponse>> login(@Valid @RequestBody LoginRequest request) {
         LoginResponse response = authService.login(request);
         return ResponseEntity.ok(ApiResponse.ok("Login successful", response));
     }
 
     @PostMapping("/register")
     @Operation(summary = "Register a new user account")
-    public ResponseEntity<ApiResponse<java.util.Map<String, String>>> register(@RequestBody CreateUserRequest request) {
+    public ResponseEntity<ApiResponse<java.util.Map<String, String>>> register(@Valid @RequestBody CreateUserRequest request) {
         User user = authService.register(request);
         return ResponseEntity.status(HttpStatus.CREATED)
                 .body(ApiResponse.ok("Account created successfully", java.util.Map.of(

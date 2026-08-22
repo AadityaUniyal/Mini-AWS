@@ -45,7 +45,10 @@ public class StorageService {
         Path dir = Path.of(basePath, userId.toString(), bucketName);
         Files.createDirectories(dir);
 
-        Path filePath = dir.resolve(objectKey);
+        Path filePath = dir.resolve(objectKey).normalize();
+        if (!filePath.startsWith(dir)) {
+            throw new IllegalArgumentException("Invalid object key: path traversal detected");
+        }
         // Ensure parent directories for nested keys (e.g. folder/file.txt)
         if (filePath.getParent() != null) {
             Files.createDirectories(filePath.getParent());
@@ -56,8 +59,10 @@ public class StorageService {
         return filePath.toString();
     }
 
-    public InputStream readObjectFromDisk(String localPath) throws FileNotFoundException {
-        return new FileInputStream(localPath);
+    public byte[] readObjectFromDisk(String localPath) throws IOException {
+        try (InputStream is = new FileInputStream(localPath)) {
+            return is.readAllBytes();
+        }
     }
 
     public InputStream readObject(byte[] content) {

@@ -9,8 +9,8 @@ import java.util.regex.Pattern;
 @Slf4j
 public class CommandSanitizer {
 
-    // Pattern to catch shell injection characters: ;, &, |, \n, \r, `, $
-    private static final Pattern INJECTION_PATTERN = Pattern.compile("[;&|`$\\n\\r]");
+    // Pattern to catch shell injection characters: ;, &, |, \n, \r, `, $, >, <, %, ^
+    private static final Pattern INJECTION_PATTERN = Pattern.compile("[;\\&|\\`$><\\\\%\\^\\n\\r\\t]");
 
     /**
      * Checks if the command is safe to execute.

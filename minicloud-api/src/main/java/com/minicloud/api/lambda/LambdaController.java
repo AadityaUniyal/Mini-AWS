@@ -85,8 +85,11 @@ public class LambdaController {
     @SecurityRequirement(name = "BearerAuth")
     @Operation(summary = "List all serverless functions")
     public ResponseEntity<Map<String, Object>> listFunctions(Authentication auth) {
+        UUID userId = resolveUserId(auth);
         List<FunctionResponse> list = managementService.listAll()
-                .stream().map(this::toResponse).collect(Collectors.toList());
+                .stream()
+                .filter(f -> f.getUserId() != null && f.getUserId().equals(userId))
+                .map(this::toResponse).collect(Collectors.toList());
         return ResponseEntity.ok(Map.of("data", list));
     }
 

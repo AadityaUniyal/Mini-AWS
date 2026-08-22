@@ -31,12 +31,11 @@ public class RdsController {
 
     @PostMapping
     @Operation(summary = "Create a new RDS instance (JSON body)")
-    public ResponseEntity<ApiResponse<RdsResponse>> create(@RequestBody java.util.Map<String, Object> req) {
-        String name = req.getOrDefault("name", "db-" + System.currentTimeMillis()).toString();
-        String dbName = req.getOrDefault("dbName", name).toString();
-        String masterUsername = req.getOrDefault("masterUsername", "admin").toString();
-        String masterPassword = req.getOrDefault("masterPassword", "password").toString();
-        UUID userId = req.containsKey("userId") ? UUID.fromString(req.get("userId").toString()) : null;
+    public ResponseEntity<ApiResponse<RdsResponse>> create(@RequestParam(required = false) UUID userId, @jakarta.validation.Valid @RequestBody com.minicloud.api.dto.RdsRequest req) {
+        String name = req.getName();
+        String dbName = req.getDatabaseName() != null ? req.getDatabaseName() : name;
+        String masterUsername = req.getMasterUsername() != null ? req.getMasterUsername() : "admin";
+        String masterPassword = req.getMasterPassword() != null ? req.getMasterPassword() : "password";
         RdsResponse response = rdsService.launchInstance(userId, name, dbName, masterUsername, masterPassword, null);
         return ResponseEntity.status(HttpStatus.CREATED).body(ApiResponse.ok("Database created", response));
     }
@@ -61,18 +60,21 @@ public class RdsController {
     }
 
     @PostMapping("/{idOrName}/start")
+    @org.springframework.security.access.prepost.PreAuthorize("isAuthenticated()")
     public ResponseEntity<ApiResponse<RdsResponse>> startInstance(@PathVariable String idOrName) {
         UUID id = resolveId(idOrName);
         return ResponseEntity.ok(ApiResponse.ok("Database starting", rdsService.startInstance(id)));
     }
 
     @PostMapping("/{idOrName}/stop")
+    @org.springframework.security.access.prepost.PreAuthorize("isAuthenticated()")
     public ResponseEntity<ApiResponse<RdsResponse>> stopInstance(@PathVariable String idOrName) {
         UUID id = resolveId(idOrName);
         return ResponseEntity.ok(ApiResponse.ok("Database stopping", rdsService.stopInstance(id)));
     }
 
     @DeleteMapping("/{idOrName}")
+    @org.springframework.security.access.prepost.PreAuthorize("isAuthenticated()")
     public ResponseEntity<ApiResponse<String>> terminateInstance(@PathVariable String idOrName) {
         UUID id = resolveId(idOrName);
         rdsService.terminateInstance(id);
