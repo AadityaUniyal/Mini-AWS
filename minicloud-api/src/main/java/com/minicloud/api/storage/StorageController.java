@@ -27,6 +27,9 @@ import java.io.InputStream;
 import java.nio.file.Path;
 import java.util.List;
 import java.util.Map;
+import com.minicloud.api.lambda.CreateTriggerRequest;
+import com.minicloud.api.lambda.S3LambdaTrigger;
+import com.minicloud.api.lambda.TriggerResponse;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.stream.Collectors;
@@ -44,6 +47,8 @@ public class StorageController {
     private final com.minicloud.api.audit.AuditService auditService;
     private final com.minicloud.api.domain.UserRepository userRepository;
     private final TaskService taskService;
+    private final S3TriggerService s3TriggerService;
+    private final S3TriggerDispatcher s3TriggerDispatcher;
 
     @GetMapping("/buckets/{name}/objects")
     @Operation(summary = "List all objects in a bucket")
@@ -170,11 +175,9 @@ public class StorageController {
         CompletableFuture<Void> future = CompletableFuture.runAsync(() -> {
             try {
                 taskService.updateProgress(task.getId(), 20, "RUNNING", null);
-                Thread.sleep(1000);
                 
                 taskService.updateProgress(task.getId(), 50, "RUNNING", null);
                 String localPath = storageService.writeObject(userId, name, objectKey, new java.io.ByteArrayInputStream(content));
-                Thread.sleep(1000);
 
                 taskService.updateProgress(task.getId(), 80, "RUNNING", null);
 
@@ -197,6 +200,10 @@ public class StorageController {
                 auditService.recordSuccess(username, "S3", "PutObject", name + "/" + objectKey);
 
                 taskService.updateProgress(task.getId(), 100, "COMPLETED", null);
+
+                // Asynchronously dispatch S3 upload event notifications to matching Lambda triggers
+                String eTag = org.springframework.util.DigestUtils.md5DigestAsHex(content);
+                s3TriggerDispatcher.dispatchUploadEvent(name, objectKey, size, eTag, userId, bucket.getAccountId());
             } catch (Exception e) {
                 log.error("Asynchronous upload failed", e);
                 taskService.updateProgress(task.getId(), 100, "FAILED", e.getMessage());
@@ -207,6 +214,45 @@ public class StorageController {
 
         return ResponseEntity.status(HttpStatus.ACCEPTED)
                 .body(ApiResponse.ok("File upload started", task));
+    }
+
+    // ─────────────── S3-TO-LAMBDA TRIGGERS ───────────────────────────────────
+
+    @PostMapping("/triggers")
+    @Operation(summary = "Register an S3-to-Lambda trigger")
+    public ResponseEntity<ApiResponse<TriggerResponse>> createTrigger(
+            @RequestBody CreateTriggerRequest request,
+            @RequestParam(required = false) UUID userId) {
+
+        S3LambdaTrigger created = s3TriggerService.createTrigger(request, userId != null ? userId : request.userId());
+        return ResponseEntity.status(HttpStatus.CREATED)
+                .body(ApiResponse.ok("Trigger created", s3TriggerService.toResponse(created)));
+    }
+
+    @GetMapping("/triggers")
+    @Operation(summary = "List S3-to-Lambda triggers")
+    public ResponseEntity<ApiResponse<List<TriggerResponse>>> listTriggers(
+            @RequestParam(required = false) String bucketName,
+            @RequestParam(required = false) UUID userId) {
+
+        List<TriggerResponse> triggers = s3TriggerService.listTriggers(bucketName, userId).stream()
+                .map(s3TriggerService::toResponse)
+                .collect(Collectors.toList());
+        return ResponseEntity.ok(ApiResponse.ok(triggers));
+    }
+
+    @GetMapping("/triggers/{id}")
+    @Operation(summary = "Get S3-to-Lambda trigger by ID")
+    public ResponseEntity<ApiResponse<TriggerResponse>> getTrigger(@PathVariable UUID id) {
+        S3LambdaTrigger trigger = s3TriggerService.getTrigger(id);
+        return ResponseEntity.ok(ApiResponse.ok(s3TriggerService.toResponse(trigger)));
+    }
+
+    @DeleteMapping("/triggers/{id}")
+    @Operation(summary = "Delete an S3-to-Lambda trigger")
+    public ResponseEntity<Void> deleteTrigger(@PathVariable UUID id) {
+        s3TriggerService.deleteTrigger(id);
+        return ResponseEntity.noContent().build();
     }
 
     @GetMapping("/buckets/{name}/{*key}")

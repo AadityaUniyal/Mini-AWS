@@ -1,0 +1,25 @@
+services:
+  minicloud:
+    build:
+      context: .
+      dockerfile: minicloud-api/Dockerfile
+    image: minicloud:latest
+    container_name: minicloud
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+    environment:
+      - MINICLOUD_MODE=WEB
+      - JAVA_OPTS=-Xmx512m -XX:+UseG1GC -XX:MaxGCPauseMillis=200 -Djava.awt.headless=true -Dfile.encoding=UTF-8
+      - SPRING_PROFILES_ACTIVE=default
+    volumes:
+      - ./minicloud-data/db:/app/minicloud-data/db
+      - ./minicloud-data/storage:/app/minicloud-data/storage
+      - ./minicloud-data/lambda-tmp:/app/minicloud-data/lambda-tmp
+      - ./minicloud-data/logs:/app/minicloud-data/logs
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8080/actuator/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s

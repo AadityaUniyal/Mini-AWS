@@ -46,6 +46,8 @@ public class LambdaController {
     private final LambdaExecutionService    executionService;
     private final LambdaInvocationLogRepository logRepository;
     private final com.minicloud.api.audit.AuditService auditService;
+    private final com.minicloud.api.storage.S3TriggerService triggerService;
+    private final S3LambdaTriggerRepository triggerRepository;
 
     // ─────────────── FUNCTION CRUD ──────────────────────────────────────────
 
@@ -212,6 +214,49 @@ public class LambdaController {
                 "success",    result.success(),
                 "summary",    result.summary()
         ));
+    }
+
+    // ─────────────── TRIGGERS ───────────────────────────────────────────────
+
+    @PostMapping("/triggers")
+    @SecurityRequirement(name = "BearerAuth")
+    @Operation(summary = "Register a new S3-to-Lambda trigger")
+    public ResponseEntity<Map<String, Object>> createTrigger(
+            @RequestBody CreateTriggerRequest req,
+            Authentication auth) {
+        UUID userId = resolveUserId(auth);
+        S3LambdaTrigger created = triggerService.createTrigger(req, userId);
+        return ResponseEntity.status(HttpStatus.CREATED)
+                .body(Map.of("message", "Trigger registered", "data", triggerService.toResponse(created)));
+    }
+
+    @GetMapping("/triggers")
+    @SecurityRequirement(name = "BearerAuth")
+    @Operation(summary = "List S3-to-Lambda triggers")
+    public ResponseEntity<Map<String, Object>> listTriggers(
+            @RequestParam(required = false) String bucketName,
+            @RequestParam(required = false) String functionName,
+            Authentication auth) {
+        UUID userId = resolveUserId(auth);
+        List<TriggerResponse> list;
+        if (functionName != null && !functionName.isBlank()) {
+            list = triggerRepository.findByFunctionName(functionName).stream()
+                    .map(triggerService::toResponse)
+                    .collect(Collectors.toList());
+        } else {
+            list = triggerService.listTriggers(bucketName, userId).stream()
+                    .map(triggerService::toResponse)
+                    .collect(Collectors.toList());
+        }
+        return ResponseEntity.ok(Map.of("data", list));
+    }
+
+    @DeleteMapping("/triggers/{id}")
+    @SecurityRequirement(name = "BearerAuth")
+    @Operation(summary = "Delete an S3-to-Lambda trigger")
+    public ResponseEntity<Map<String, Object>> deleteTrigger(@PathVariable UUID id) {
+        triggerService.deleteTrigger(id);
+        return ResponseEntity.ok(Map.of("message", "Trigger deleted", "data", id.toString()));
     }
 
     // ─────────────── Helpers ────────────────────────────────────────────────

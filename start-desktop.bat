@@ -10,6 +10,15 @@ echo   MiniCloud Desktop Application
 echo ========================================
 echo.
 
+REM ── Check & Resolve JAVA_HOME ───────────────────────────────────────────────
+if not exist "%JAVA_HOME%\bin\java.exe" (
+    if exist "C:\Program Files\Java\jdk-17.0.20\bin\java.exe" (
+        set "JAVA_HOME=C:\Program Files\Java\jdk-17.0.20"
+    ) else if exist "C:\Program Files\Java\latest\bin\java.exe" (
+        set "JAVA_HOME=C:\Program Files\Java\latest"
+    )
+)
+
 REM Build the project
 echo [1/2] Building project...
 call mvnw.cmd clean package -DskipTests -pl minicloud-api -am

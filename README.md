@@ -1,113 +1,228 @@
-# ☁️ MiniCloud: AWS-Equivalent Desktop Cloud Platform
+# ☁️ MiniCloud: Self-Hosted AWS-Equivalent Cloud Platform
 
-MiniCloud is a production-grade, self-hosted simulation of **Amazon Web Services (AWS)**. It runs entirely on your local laptop as a **Modular Monolith** using Spring Boot and Java Swing—providing a complete AWS-equivalent cloud ecosystem without any expensive remote servers or complicated infrastructure.
+[![Java](https://img.shields.io/badge/Java-17%20LTS-ED8B00?logo=openjdk&logoColor=white)](https://openjdk.org/)
+[![Spring Boot](https://img.shields.io/badge/Spring%20Boot-3.2.5-6DB33F?logo=springboot&logoColor=white)](https://spring.io/projects/spring-boot)
+[![Docker](https://img.shields.io/badge/Docker-Enabled-2496ED?logo=docker&logoColor=white)](https://www.docker.com/)
+[![FlatLaf](https://img.shields.io/badge/UI-Java%20Swing%20%2B%20FlatLaf-blue)](https://www.formdev.com/flatlaf/)
+[![License](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
+
+**MiniCloud** is an enterprise-grade, self-hosted simulation of **Amazon Web Services (AWS)** packaged as a **Modular Monolith**. It runs completely on your local machine with zero external cloud dependencies or surprise bills, providing full architectural and functional parity with core AWS services—including **IAM, EC2, S3, RDS, Lambda, VPC, CloudWatch, Billing, Chaos Engineering, and Rightsizing Recommendations**.
 
 ---
 
-## 📂 Repository & Project Structure
+## 🏗️ High-Level System Architecture
 
-The project is organized into structured packages separating AWS simulation services, database mapping layers, and the desktop user interface.
+```
+                                  +-------------------------------------------------------+
+                                  |                     Client Layer                      |
+                                  |  +------------------------+  +---------------------+  |
+                                  |  | Java Swing Desktop App |  | Python CLI / cURL   |  |
+                                  |  | (FlatLaf Dark Theme)   |  | (Click + Rich UI)   |  |
+                                  |  +-----------+------------+  +----------+----------+  |
+                                  +--------------|--------------------------|-------------+
+                                                 | REST / WebSocket         |
+                                                 v                          v
++-----------------------------------------------------------------------------------------+
+|                               MiniCloud Core Engine (Port 8080)                         |
+|                                                                                         |
+|  +-----------------------------------------------------------------------------------+  |
+|  |                                  Security & IAM                                   |  |
+|  |  [ JWT Authentication Filter ]  [ AWS JSON Policy Evaluator ]  [ CloudTrail Audit]|  |
+|  +-----------------------------------------------------------------------------------+  |
+|                                                                                         |
+|  +---------------------+  +---------------------+  +---------------------------------+  |
+|  |   Compute (EC2)     |  |   Storage (S3)      |  |      Serverless (Lambda)        |  |
+|  |  * Lifecycle Engine |  |  * Bucket Manager   |  |  * Docker & Host Runtimes       |  |
+|  |  * Process Sandbox  |  |  * Static Web Host  |  |  * S3 Async Event Dispatcher    |  |
+|  |  * Auto Scaling     |  |  * Multipart Upload |  |  * WebSocket Log Streaming      |  |
+|  +---------------------+  +---------------------+  +---------------------------------+  |
+|                                                                                         |
+|  +---------------------+  +---------------------+  +---------------------------------+  |
+|  |   Database (RDS)    |  |    Network (VPC)    |  |    Observability & Intel        |  |
+|  |  * Managed Instances|  |  * Subnets & CIDRs  |  |  * CloudWatch Metric Alarms     |  |
+|  |  * Storage Engine   |  |  * Security Groups  |  |  * Rightsizing Advisor Engine   |  |
+|  |  * Auto Backups     |  |  * Network ACLs     |  |  * Chaos Failure Injection      |  |
+|  +---------------------+  +---------------------+  +---------------------------------+  |
+|                                                                                         |
+|  +-----------------------------------------------------------------------------------+  |
+|  |                        Persistence & Real-Time Telemetry                          |  |
+|  |  [ Flyway Schema (V1, V2, V3) ]  [ H2 Zero-Install Engine / Neon PostgreSQL ]     |  |
+|  +-----------------------------------------------------------------------------------+  |
++-----------------------------------------------------------------------------------------+
+```
+
+---
+
+## 🌟 Standout Capabilities
+
+MiniCloud offers standout capabilities that bridge simulation and production readiness:
+
+### 1. 🪣 ➔ ⚡ S3-to-Lambda Asynchronous Event Triggers
+- Link bucket events (`OBJECT_CREATED`, `OBJECT_DELETED`) directly to Lambda function invocations.
+- Upon file upload, an event payload matching the standard AWS S3 event schema is asynchronously dispatched.
+- Execution logs (stdout/stderr) are streamed in real-time over WebSockets to connected listeners.
+
+### 2. 🤖 Telemetry-Driven Cost & Rightsizing Advisor
+- Rolling CPU metrics gathered via OSHI and synthetic usage metrics are evaluated against cost models.
+- Generates actionable rightsizing recommendations (`GET /api/v1/billing/recommendations`), flagging underutilized instances (<10% average CPU) with exact dollar savings.
+
+### 3. 💥 Chaos Engineering & Self-Healing Auto-Scaling
+- Trigger controlled failure injections (`POST /api/v1/chaos/terminate-random-instance`).
+- The autonomous Auto Scaling background loop detects capacity deficits, spins up healthy replacements, and broadcasts recovery events via WebSocket.
+
+### 4. 💻 Ergonomic Python CLI (`minicloud`)
+- Full-featured command-line utility built with Python, Click, and Rich.
+- Interactive commands for EC2, S3, Lambda, Billing, Chaos testing, and System status.
+
+### 5. 🐳 1-Command Docker Compose Setup
+- Single command `docker compose up` brings up the complete serverless cloud monolith in containerized mode with volume persistence and health checks.
+
+---
+
+## 📂 Repository Structure
 
 ```
 Mini-AWS/
-├── minicloud-api/                        ← Core Spring Boot Application Module
-│   ├── src/main/java/com/minicloud/api/
-│   │   ├── MiniCloudApiApplication.java  ← Main entry point (WEB / DESKTOP mode selector)
-│   │   ├── auth/                         ← Security configurations, filters & JWT utilities
-│   │   ├── audit/                        ← CloudTrail-style audit log recorder (immutable events)
-│   │   ├── billing/                      ← Cost accumulation engine & invoicing system
-│   │   ├── compute/                      ← EC2 simulation (VM manager, security groups, command sanitizer)
-│   │   ├── domain/                       ← JPA entities mapping to H2/MySQL tables
-│   │   ├── dto/                          ← REST request & response payloads
-│   │   ├── iam/                      ← IAM users, access keys, policies & PolicyEvaluator
-│   │   ├── lambda/                   ← Serverless engines (Subprocess & Docker runner)
-│   │   ├── monitoring/               ← Diagnostics, CloudWatch metrics, alarms & auto-scaling
-│   │   ├── rds/                      ← Managed H2 database instances per account
-│   │   ├── route/                    ← Network (VPC, Subnet, Route53, ProxyService, NACL)
-│   │   ├── storage/                  ← S3 bucket storage & static website hosting
-│   │   └── ui/                       ← FlatLaf-styled Java Swing Desktop UI console
-│   ├── src/main/resources/
-│   │   ├── application.properties        ← Central application config parameters
-│   │   └── db/migration/                 ← Database migration scripts (Flyway)
-│   └── pom.xml                           ← API module Maven dependencies
-├── pom.xml                               ← Parent Maven project configuration
-├── start-desktop.bat                     ← Batch launcher script (Swing Dashboard UI)
-├── start.bat                             ← Multi-mode launcher (WEB or DESKTOP)
-├── setup-minicloud.ps1                   ← Initial setup & provisioning script
-└── LICENSE                               ← MIT License
+├── docker-compose.yml              ← 1-command containerized cloud monolith deployment
+├── pom.xml                         ← Root Maven BOM & dependency management
+├── start.bat                       ← Multi-mode interactive launcher (WEB / DESKTOP)
+├── start-desktop.bat               ← Dedicated Java Swing Desktop UI launcher
+├── start.sh                        ← Linux / macOS shell launcher
+├── minicloud-api/                  ← Core Spring Boot Cloud Platform
+│   ├── Dockerfile                  ← Multi-stage production container build
+│   ├── pom.xml                     ← Spring Boot module dependencies & repackage config
+│   └── src/
+│       ├── main/
+│       │   ├── java/com/minicloud/api/
+│       │   │   ├── audit/          ← CloudTrail immutable event logger
+│       │   │   ├── auth/           ← Spring Security, JWT filters & token provider
+│       │   │   ├── billing/        ← Cost ledger & Rightsizing Advisor
+│       │   │   ├── chaos/          ← Chaos Engineering failure injection service
+│       │   │   ├── compute/        ← EC2 VM manager & Docker sandbox
+│       │   │   ├── domain/         ← JPA domain entities
+│       │   │   ├── iam/            ← IAM accounts, users, policies & evaluator
+│       │   │   ├── lambda/         ← Serverless execution engine & S3 triggers
+│       │   │   ├── monitoring/     ← CloudWatch metrics, alarms & OSHI probes
+│       │   │   ├── rds/            ← Managed database instance manager
+│       │   │   ├── route/          ← VPC, Subnets, Route 53 & Security Groups
+│       │   │   ├── storage/        ← S3 object storage & trigger dispatcher
+│       │   │   └── ui/             ← FlatLaf AWS Dark/Light Java Swing Console
+│       │   └── resources/
+│       │       ├── application.properties ← Default H2 zero-install config
+│       │       └── db/migration/   ← Flyway database migrations (V1, V2, V3)
+│       └── test/                   ← Comprehensive unit & integration test suites
+├── minicloud-cli/                  ← Interactive Python CLI package
+│   ├── pyproject.toml              ← CLI package manifest
+│   ├── README.md                   ← CLI command reference
+│   └── minicloud/                  ← CLI command implementations
+└── e2e-tests/                      ← End-to-end integration test suites
 ```
-
----
-
-## 🎯 Key Capabilities & Parity
-
-MiniCloud implements real-world AWS behaviors and patterns:
-
-*   **🔐 Identity & Access Management (IAM)**: Authenticate as the Root user (email) or an IAM User (12-digit Account ID + username). Evaluate access permissions using AWS-style JSON Policy documents (supporting `Effect`, `Action`, `Resource`, `Condition` blocks, and context variables like `${aws:username}`).
-*   **💻 Elastic Compute Cloud (EC2)**: Launch, stop, and terminate instance runtimes. Commands are executed inside a secure, lightweight **Docker Alpine container sandbox** with automatic fallback to local host subprocesses if Docker is inactive.
-*   **⚡ AWS Lambda**: Upload code scripts (Python, Node.js, Java, Go, Bash, etc.) and run them on-demand inside isolated Docker runtime environments (mounting directories to `/var/task`) or local interpreters.
-*   **🪣 Simple Storage Service (S3)**: Programmatically create buckets, upload/retrieve objects, and configure S3 Static Website Hosting (serving HTML documents at `/site/...`).
-*   **🌐 Virtual Private Cloud (VPC)**: Segment infrastructure across VPC CIDRs, subnets, Route 53 DNS records, and enforce security boundaries using **stateful Security Groups** and **stateless Network ACLs (NACLs)**.
-*   **📊 CloudWatch & CloudTrail**: Track real-time OS CPU/RAM sampling, configure threshold alarms, view rolling log streams, and audit every single action in immutable audit logs.
-*   **💸 Billing**: Real-time cost accumulation engine tracking compute uptime, storage footprints, and invoice generations.
 
 ---
 
 ## 🚀 Quick Start Guide
 
-### 1. Prerequisites
-Ensure you have the following installed on your laptop:
-- **Java 17+** (OpenJDK)
-- **Maven** (optional, wrapper is included)
-- **Docker Desktop** (optional, recommended for sandboxing isolation)
-- **MySQL Server** (optional, default configuration runs on a file-based H2 database out of the box)
+### Prerequisites
+- **Java 17 LTS** (OpenJDK / Eclipse Adoptium / Oracle JDK)
+- **Maven 3.8+** (or use included `./mvnw`)
+- **Docker Desktop** (optional, recommended for sandboxed Lambda/EC2 containers)
+- **Python 3.9+** (optional, for CLI and E2E tests)
 
-### 2. Configure Database (Optional)
-By default, the application runs on a local H2 database (`miniclouddb` files inside `minicloud-data/db`). If you prefer to run on MySQL:
-1. Open your database config, create a scheme named `minicloud_db`.
-2. Edit configuration parameters inside [application.properties](file:///c:/Users/HP/OneDrive/Desktop/MINI-AWS/Mini-AWS/minicloud-api/src/main/resources/application.properties) to point to your local MySQL datasource URL.
+---
 
-### 3. Run the Platform
+### Option 1: Java Swing Desktop UI Mode (Recommended)
 
-To start the platform in **Desktop Dashboard Mode** (Java Swing GUI):
+Run the desktop launcher:
+```powershell
+.\start-desktop.bat
+```
+*Launches the Spring Boot backend and pops up the AWS-styled Swing Desktop Management Console.*
+
+---
+
+### Option 2: Headless Web API Mode
+
+Run headless web service (ideal for CI/CD, CLI access, or Swagger UI):
 ```bash
-# Using the launcher batch script
-./start-desktop.bat
-
-# Or run manually via maven
-./mvnw.cmd spring-boot:run -pl minicloud-api -Dspring-boot.run.arguments=--mode=DESKTOP
+./mvnw clean compile spring-boot:run -pl minicloud-api
 ```
 
-To run in **Headless Web API Mode** (accessible via Swagger):
+- **Swagger UI / OpenAPI**: [http://localhost:8080/swagger-ui/index.html](http://localhost:8080/swagger-ui/index.html)
+- **Actuator Health**: [http://localhost:8080/actuator/health](http://localhost:8080/actuator/health)
+
+---
+
+### Option 3: 1-Command Docker Compose
+
 ```bash
-./mvnw.cmd spring-boot:run -pl minicloud-api
+docker compose up --build
+```
+*Instantly boots the platform with H2 storage, port 8080 exposed, and persistent data volumes.*
+
+---
+
+## 🛠️ CLI Quick Start
+
+```bash
+cd minicloud-cli
+pip install -e .
+
+# Log in
+minicloud auth login --username root --password password
+
+# Check cloud status
+minicloud status
+
+# Launch an EC2 instance
+minicloud ec2 launch --name test-vm --type t2.micro
+
+# Upload to S3
+minicloud s3 mb my-bucket
+minicloud s3 cp README.md s3://my-bucket/README.md
+
+# Inspect Rightsizing Recommendations
+minicloud billing recommendations
 ```
 
 ---
 
-## ⚙️ Diagnostics & Advanced Security Operations
+## 📊 Core API Route Reference
 
-### Startup Diagnostics
-During boot, MiniCloud automatically runs the environment checker, outputting a diagnostic status block of your tools in the startup console:
+| Service | Method | Path | Description |
+|---|---|---|---|
+| **Auth** | `POST` | `/api/v1/auth/login` | Authenticate and obtain JWT token |
+| **Auth** | `POST` | `/api/v1/auth/register` | Register a new root account |
+| **IAM** | `GET` | `/api/v1/iam/users` | List IAM users for active account |
+| **IAM** | `POST` | `/api/v1/iam/policies` | Create AWS JSON policy |
+| **EC2** | `GET` | `/api/v1/compute/instances` | List all compute instances |
+| **EC2** | `POST` | `/api/v1/compute/instances` | Launch a new VM instance |
+| **EC2** | `DELETE` | `/api/v1/compute/instances/{id}` | Terminate an EC2 instance |
+| **S3** | `GET` | `/api/v1/storage/buckets` | List all S3 buckets |
+| **S3** | `POST` | `/api/v1/storage/buckets/{name}/objects` | Upload S3 object |
+| **Lambda** | `GET` | `/api/v1/lambda/functions` | List serverless functions |
+| **Lambda** | `POST` | `/api/v1/lambda/functions/{name}/invoke` | Synchronously invoke a function |
+| **Lambda** | `POST` | `/api/v1/lambda/triggers` | Create S3-to-Lambda trigger |
+| **Billing** | `GET` | `/api/v1/billing/summary` | Get aggregated account cost ledger |
+| **Billing** | `GET` | `/api/v1/billing/recommendations` | Get telemetry rightsizing advice |
+| **Chaos** | `POST` | `/api/v1/chaos/terminate-random-instance` | Inject random instance termination |
+| **Health** | `GET` | `/actuator/health` | Service health & component probes |
+
+---
+
+## 🧪 Running Automated Tests
+
+Run the full Maven test suite (Unit & Integration tests):
+```bash
+./mvnw clean test
 ```
-==================================================
-         MINICLOUD ENVIRONMENT DIAGNOSTICS        
-==================================================
-  DOCKER     : ✅ ACTIVE
-  PYTHON     : ✅ ACTIVE
-  NODE       : ✅ ACTIVE
-  JAVA       : ✅ ACTIVE
-  RUBY       : ❌ INACTIVE (Fallback Mode)
-  GO         : ❌ INACTIVE (Fallback Mode)
-  DOTNET     : ❌ INACTIVE (Fallback Mode)
-==================================================
+
+Run Python CLI tests:
+```bash
+cd minicloud-cli
+pytest
 ```
-You can query this dynamically via `GET /api/v1/diagnostics`.
 
-### Sandbox Command Sanitization
-Any command sent to start an EC2 instance or execute functions is automatically processed by `CommandSanitizer`. It prevents remote shell injections by blocking dangerous characters (like `;`, `&&`, `||`, backticks, `$()`).
+---
 
-### Subnet NACL Enforcement
-Traffic passing through MiniRoute to your virtual resources traverses stateless subnet boundaries:
-- By default, all subnets are allocated an "Allow All" (Rule 100) NACL.
-- You can dynamically add rules (e.g. Rule 50: Deny protocol TCP, source port range 22-22 from `192.168.1.0/24`) using `NetworkAclService` to isolate subnet components.
+## 📄 License
+This project is open-source software licensed under the [MIT License](LICENSE).

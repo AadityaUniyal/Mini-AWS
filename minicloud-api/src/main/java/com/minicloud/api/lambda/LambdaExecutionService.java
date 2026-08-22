@@ -241,6 +241,33 @@ public class LambdaExecutionService {
                 log.info("Resolved artifact '{}' from storage at {}", artifactName, storageFile);
                 return dest;
             }
+
+            if (fn.getUserId() != null) {
+                Path userStorageFile = Path.of(storagePath, fn.getUserId().toString(), fn.getS3Bucket(), fn.getS3Key());
+                if (Files.exists(userStorageFile)) {
+                    Files.copy(userStorageFile, dest, StandardCopyOption.REPLACE_EXISTING);
+                    log.info("Resolved artifact '{}' from user storage at {}", artifactName, userStorageFile);
+                    return dest;
+                }
+            }
+        }
+
+        // Try direct codePath if set
+        if (fn.getCodePath() != null && !fn.getCodePath().isBlank()) {
+            Path codePath = Path.of(fn.getCodePath());
+            if (Files.exists(codePath)) {
+                Files.copy(codePath, dest, StandardCopyOption.REPLACE_EXISTING);
+                log.info("Resolved artifact '{}' from codePath at {}", artifactName, codePath);
+                return dest;
+            }
+        }
+
+        // Try handler if handler points directly to an existing local file
+        if (fn.getHandler() != null && Files.exists(Path.of(fn.getHandler()))) {
+            Path handlerPath = Path.of(fn.getHandler());
+            Files.copy(handlerPath, dest, StandardCopyOption.REPLACE_EXISTING);
+            log.info("Resolved artifact '{}' from handler path at {}", artifactName, handlerPath);
+            return dest;
         }
 
         // Fallback: already materialised from a previous invocation (cached)

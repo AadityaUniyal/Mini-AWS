@@ -58,6 +58,13 @@ set ERROR_CODE=0
 @setlocal
 
 @REM ==== START VALIDATION ====
+if not exist "%JAVA_HOME%\bin\java.exe" (
+    if exist "C:\Program Files\Java\jdk-17.0.20\bin\java.exe" (
+        set "JAVA_HOME=C:\Program Files\Java\jdk-17.0.20"
+    ) else if exist "C:\Program Files\Java\latest\bin\java.exe" (
+        set "JAVA_HOME=C:\Program Files\Java\latest"
+    )
+)
 if not "%JAVA_HOME%" == "" goto OkJHome
 
 echo.

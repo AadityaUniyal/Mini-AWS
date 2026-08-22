@@ -21,6 +21,17 @@ import java.util.Map;
 public class BillingController {
 
     private final BillingService billingService;
+    private final RightsizingAdvisorService rightsizingAdvisorService;
+
+    @GetMapping("/recommendations")
+    @Operation(summary = "Get cost rightsizing recommendations for underutilized instances",
+               description = "Analyzes rolling CPU utilization metrics (<10% threshold) and suggests cost-saving instance downgrades")
+    public ResponseEntity<ApiResponse<RightsizingResponseDTO>> getRecommendations(
+            @Parameter(description = "Optional AWS Account ID to filter recommendations")
+            @RequestParam(required = false) String accountId) {
+        RightsizingResponseDTO response = rightsizingAdvisorService.getRecommendations(accountId);
+        return ResponseEntity.ok(ApiResponse.ok("Rightsizing recommendations generated", response));
+    }
 
     @GetMapping("/summary/{accountId}")
     @Operation(summary = "Get billing summary for an account")

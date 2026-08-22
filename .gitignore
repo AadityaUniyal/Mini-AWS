@@ -38,3 +38,15 @@ Thumbs.db
 /config/
 application-local.properties
 application-local.yml
+
+# ── Python / CLI ──────────────────────────────────────────────
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+.pytest_cache/
+.coverage
+htmlcov/
+.venv/
+venv/
+ENV/

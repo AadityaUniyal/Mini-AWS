@@ -1,193 +1,149 @@
-# MiniCloud — Architecture Overview
+# 🏛️ MiniCloud: Architecture & Engineering Deep-Dive
 
-MiniCloud is a production-grade **AWS-equivalent cloud platform** built as a **Modular Monolith** on Spring Boot 3.2. It runs entirely in a single JVM process, optimized for laptop hardware (~512MB RAM), with a dual-mode startup: headless web service or full Swing desktop UI.
+MiniCloud is engineered as a high-performance **Modular Monolith** in Java 17 using **Spring Boot 3.2.5** and **FlatLaf Swing**. This document outlines the architectural paradigms, internal subsystems, thread model, data pipeline, and security mechanisms that enable accurate, local AWS emulation.
 
 ---
 
-## Project Structure
+## 📐 Architectural Design Principles
+
+1. **Modular Monolith Topology**: All AWS services (Compute, Storage, Serverless, IAM, Network, Telemetry) are modeled as decoupled domains with clean interfaces, compiled into a single executable artifact (`minicloud-api-1.0.0.jar`).
+2. **Dual-Mode Startup (Headless / Desktop)**:
+   - **`DESKTOP` Mode**: Initializes an embedded Tomcat REST server alongside a Pure Java Swing management dashboard styled with FlatLaf Dark.
+   - **`WEB` Mode**: Runs headless for containerized production deployments, CLI automation, and CI pipelines.
+3. **Resilient Sandboxing & Fallbacks**:
+   - Compute and Lambda runtimes prefer **Docker Alpine sandboxing** when the Docker daemon is responsive.
+   - If Docker is unavailable, the platform seamlessly falls back to isolated host subprocesses (`ProcessBuilder`), ensuring 100% functionality on any developer machine.
+4. **Pluggable Persistence**:
+   - Zero-configuration local mode uses file-based **H2 Database** (`minicloud-data/db/miniclouddb`).
+   - Enterprise mode supports cloud-native **PostgreSQL** via profile activation (`--spring.profiles.active=postgres`).
+   - Automated schema versioning and real-time database views are managed via **Flyway** (`V1`, `V2`, `V3`).
+
+---
+
+## 🔍 Subsystem Deep-Dive
 
 ```
-minicloud/
-├── minicloud-api/                        ← Single deployable Spring Boot JAR
-│   ├── src/main/java/com/minicloud/api/
-│   │   ├── MiniCloudApiApplication.java  ← Entry point (WEB / DESKTOP mode)
-│   │   ├── auth/                         ← JWT filter + UserPrincipal
-│   │   ├── audit/                        ← CloudTrail-style event logging
-│   │   ├── billing/                      ← Cost accumulation + invoicing
-│   │   ├── compute/                      ← EC2 instances + security groups
-│   │   ├── config/                       ← Spring Security, JPA, Cache, WebSocket
-│   │   ├── domain/                       ← JPA entities + Spring Data repositories
-│   │   ├── dto/                          ← Request/response DTOs
-│   │   ├── exception/                    ← Global exception handler
-│   │   ├── iam/                          ← Auth, IAM users, policies, access keys
-│   │   ├── lambda/                       ← Serverless function execution engine
-│   │   ├── monitoring/                   ← CloudWatch metrics, alarms, auto-scaling
-│   │   │   └── logs/                     ← CloudWatch Logs (streams + events)
-│   │   ├── rds/                          ← Managed H2 database lifecycle
-│   │   ├── route/                        ← VPC, Route53, reverse proxy (MiniRoute)
-│   │   ├── storage/                      ← S3 buckets, objects, static website hosting
-│   │   └── ui/                           ← Swing desktop UI (FlatLaf dark theme)
-│   │       └── panels/                   ← EC2, S3, Lambda, RDS, IAM, Billing panels
-│   ├── src/main/resources/
-│   │   ├── application.properties        ← All configuration
-│   │   ├── db/migration/                 ← Flyway SQL migrations (V1, V2)
-│   │   └── static/                       ← Web frontend (HTML/CSS/JS)
-│   └── pom.xml
-├── pom.xml                               ← Parent Maven build
-├── mvnw / mvnw.cmd                       ← Maven wrapper
-└── start.bat                             ← One-click launcher (WEB or DESKTOP)
-```
-
----
-
-## Startup Modes
-
-MiniCloud supports two startup modes resolved from `--mode=` CLI arg or `MINICLOUD_MODE` env var:
-
-| Mode | Description | How to start |
-|------|-------------|--------------|
-| `WEB` (default) | Headless REST API + system tray icon | `start.bat` or `--mode=WEB` |
-| `DESKTOP` | Swing dashboard + embedded API | `start.bat desktop` or `--mode=DESKTOP` |
-
----
-
-## AWS Service Parity
-
-| MiniCloud | AWS Equivalent | Endpoint Prefix | Notes |
-|-----------|---------------|-----------------|-------|
-| `AuthService` / `IamService` | IAM | `/auth`, `/api/iam` | JWT tokens, users, policies, access keys |
-| `ComputeService` | EC2 | `/api/compute/instances` | Launch/stop/terminate instances |
-| `SecurityGroupController` | EC2 Security Groups | `/api/compute/security-groups` | Ingress/egress rules |
-| `StorageController` | S3 | `/storage` | Buckets, upload, download, delete |
-| `WebsiteController` | S3 Static Hosting | `/site` | SPA mode, index/error documents |
-| `RdsService` | RDS | `/rds/instances` | Embedded H2 per database instance |
-| `LambdaController` | Lambda | `/lambda` | BASH, Python, Node, Java, Go, Ruby, .NET |
-| `AuditService` | CloudTrail | `/monitoring/audit` | Immutable event log with userId |
-| `MetricsService` | CloudWatch Metrics | `/monitoring` | OSHI-based CPU/RAM/disk sampling |
-| `AlarmService` | CloudWatch Alarms | `/monitoring/alarms` | Threshold-based metric alarms |
-| `LogService` | CloudWatch Logs | `/api/logs` | Log streams + events |
-| `AutoScalingService` | Auto Scaling | `/scaling` | CPU-based horizontal scaling decisions |
-| `BillingService` | AWS Billing | `/api/billing` | Per-minute cost accumulation |
-| `VpcService` / `NetworkController` | VPC | `/api/vpc` | VPCs + subnets per account |
-| `Route53Service` | Route 53 | `/api/route53` | Hosted zones + DNS records |
-| `ProxyService` | ALB / API Gateway | `/routes`, `/proxy` | Reverse proxy with health checks |
-| `NetworkAclService` | VPC Network ACLs | `/api/vpc` | Subnet stateless firewall rules |
-| `SystemDiagnostics` | Environment diagnostics | `/api/v1/diagnostics` | Startup tool/interpreter checks |
-| `CommandSanitizer` | Security validation | None (Internal) | Prevents command execution injection |
-| `TenantService` | AWS Organizations | `/tenants` | Multi-tenant quota enforcement |
-
----
-
-## Technology Stack
-
-| Layer | Technology |
-|-------|-----------|
-| Runtime | Java 17, Spring Boot 3.2.5 |
-| Security | Spring Security 6 + JJWT 0.12 (HS256 JWT) |
-| Database | H2 (dev, file-based) / MySQL / PostgreSQL |
-| ORM | Hibernate 6 + Spring Data JPA + Flyway |
-| Connection Pool | HikariCP (2× CPU cores pool size) |
-| Naming Strategy | `CamelCaseToUnderscoresNamingStrategy` |
-| Caching | Caffeine (in-memory, no Redis required) |
-| API Docs | SpringDoc OpenAPI 2.5 at `/swagger-ui.html` |
-| Real-time | Spring WebSocket (STOMP + raw WS handler) |
-| Metrics | OSHI 6.6 (OS-level CPU/RAM/disk) |
-| Desktop UI | Swing + FlatLaf 3.4 (AWS dark theme) |
-| Build | Maven 3 + Maven Wrapper |
-
----
-
-## Database Schema
-
-Managed by Flyway. Two migrations:
-
-- **V1** — Full initial schema (20+ tables, all aligned with JPA entity `@Table` names)
-- **V2** — Makes `monitoring_audit_logs.user_id` nullable
-
-Key naming conventions:
-- IAM tables: `iam_users`, `iam_policies`, `iam_access_keys`, `iam_buckets`
-- Compute: `compute_instances`, `compute_security_groups`, `compute_security_group_rules`
-- Storage: `storage_objects`, `storage_object_metadata`
-- Lambda: `lambda_functions`, `lambda_invocation_logs`
-- Monitoring: `monitoring_alarms`, `monitoring_audit_logs`
-- Networking: `vpc_networks`, `vpc_subnets`, `routes`, `route53_hosted_zones`, `route53_records`
-- Billing: `billing_records`, `billing_invoices`
-- Logs: `log_streams`, `log_events`
-
----
-
-## Security
-
-- All endpoints require JWT Bearer token except: `/auth/**`, `/h2-console/**`, `/swagger-ui/**`, `/actuator/**`, `/site/**`, `/lambda/invoke/**`, `/ws-events/**`
-- CORS enabled for all origins (configurable for production)
-- BCrypt password hashing
-- `@PreAuthorize("hasRole('ADMIN')")` on admin-only endpoints
-- Policy evaluation via AWS-style JSON policy documents (Allow/Deny/Effect)
-
----
-
-## Key Configuration (`application.properties`)
-
-```properties
-server.port=8080
-spring.datasource.url=jdbc:h2:file:./minicloud-data/db/miniclouddb
-minicloud.jwt.secret=<change-in-production>
-minicloud.jwt.expiry-ms=3600000
-minicloud.storage.base-path=./minicloud-data/storage
-minicloud.lambda.tmp-dir=./minicloud-data/lambda-tmp
-minicloud.h2.tcp.port=9092          # External H2 TCP access
-spring.flyway.enabled=true
-spring.cache.type=caffeine
-server.shutdown=graceful
++---------------------------------------------------------------------------------------+
+|                                    MiniCloud Subsystems                               |
+|                                                                                       |
+|  +------------------------+  +------------------------+  +-------------------------+  |
+|  |     IAM & Security     |  |    Compute Engine      |  |     Storage Engine      |  |
+|  | * JWT (JJWT 0.12.x)    |  | * State Machine        |  | * Local File Storage    |  |
+|  | * PolicyEvaluator      |  | * Docker / Subprocess  |  | * ETag MD5 Hasher       |  |
+|  | * CloudTrail Recorder  |  | * Auto-Healing Loop    |  | * S3TriggerDispatcher   |  |
+|  +------------------------+  +------------------------+  +-------------------------+  |
+|                                                                                       |
+|  +------------------------+  +------------------------+  +-------------------------+  |
+|  |    Lambda Serverless   |  |   Telemetry & Advisor  |  |   Network & Security    |  |
+|  | * Polyglot Runners    |  | * OSHI Hardware Probes |  | * CIDR IP Allocator     |  |
+|  | * S3 Event Trigger     |  | * Rightsizing Advisor  |  | * Stateful Sec Groups   |  |
+|  | * WS Log Broadcast     |  | * CloudWatch Alarms    |  | * Stateless NACLs       |  |
+|  +------------------------+  +------------------------+  +-------------------------+  |
++---------------------------------------------------------------------------------------+
 ```
 
 ---
 
-## Running Locally
+### 1. Identity & Access Management (IAM) Engine
 
-```bash
-# Quick start (interactive mode selection)
-start.bat
-
-# Web service mode
-start.bat web
-
-# Desktop UI mode
-start.bat desktop
-
-# Manual Maven run
-.\mvnw.cmd spring-boot:run -pl minicloud-api
-
-# With explicit mode
-.\mvnw.cmd spring-boot:run -pl minicloud-api -Dspring-boot.run.arguments=--mode=DESKTOP
-```
-
-**Endpoints after startup:**
-
-| URL | Description |
-|-----|-------------|
-| `http://localhost:8080` | Web Management Console |
-| `http://localhost:8080/swagger-ui.html` | API Documentation |
-| `http://localhost:8080/h2-console` | Database Browser (JDBC: `jdbc:h2:file:./minicloud-data/db/miniclouddb`) |
-| `http://localhost:8080/actuator/health` | Health Check |
-| `http://localhost:9092` | H2 TCP Server (external JDBC access) |
-
-**Default credentials:**
-- Email: `admin@minicloud.io`
-- Password: `admin123`
-- Account ID: `123456789012`
+MiniCloud replicates AWS IAM evaluation logic:
+- **Account Hierarchy**: Every tenant has a 12-digit AWS Account ID. The account owner is the `Root User`. Sub-users are `IAM Users`.
+- **AWS Policy Evaluator**:
+  - Accepts standard AWS JSON policy documents containing `Statement` arrays with `Effect` (`Allow`/`Deny`), `Action` (e.g., `s3:GetObject`, `ec2:*`), and `Resource` ARNs (e.g., `arn:aws:s3:::my-bucket/*`).
+  - Implements **Explicit Deny Precedence**: If any policy denies an action, access is rejected even if another policy allows it.
+  - Supports context variable expansion such as `${aws:username}` and `${aws:PrincipalAccount}`.
+- **CloudTrail Audit Recorder**: Every authenticated API request logs an immutable event (`audit_events` table) recording timestamp, user ID, client IP, action, resource ARN, and request parameters.
 
 ---
 
-## Data Directory
+### 2. Compute Engine (EC2 & Auto Scaling)
 
-All runtime data is stored under `minicloud-api/minicloud-data/`:
+- **Lifecycle State Machine**: Transitions instances across `PENDING ➔ RUNNING ➔ STOPPING ➔ STOPPED ➔ TERMINATED`.
+- **Process Sandbox**:
+  - Instances run with CPU and memory quotas.
+  - Commands sent via instance console are executed inside isolated Docker containers or sandboxed subprocesses with command sanitization preventing host escape.
+- **Auto Scaling & Chaos Self-Healing**:
+  - Background scheduler (`eval-interval-ms=60000`) continuously queries target groups and compute instance health.
+  - When an instance is terminated unexpectedly or via Chaos Engineering (`/api/v1/chaos/terminate-random-instance`), the loop detects the capacity deficit and launches a replacement instance automatically.
+
+---
+
+### 3. Storage Engine (S3) & Event Trigger Dispatcher
+
+- **Storage Structure**:
+  - Buckets are created as subdirectories under `minicloud-data/storage/<bucket-name>/`.
+  - Object metadata, content types, ETags (MD5 checksums), and size bytes are persisted in relational storage while byte payloads are stored on disk.
+- **S3-to-Lambda Event Dispatcher**:
+  - Triggers are registered in `s3_lambda_triggers` table mapping a source bucket and event type (`OBJECT_CREATED`, `OBJECT_DELETED`) to a target Lambda function.
+  - `S3TriggerService` detects uploads and constructs an AWS-compliant JSON payload:
+    ```json
+    {
+      "Records": [
+        {
+          "eventVersion": "2.1",
+          "eventSource": "aws:s3",
+          "eventName": "ObjectCreated:Put",
+          "s3": {
+            "bucket": { "name": "my-bucket", "arn": "arn:aws:s3:::my-bucket" },
+            "object": { "key": "data.csv", "size": 1024, "eTag": "d41d8cd98f00b204e9800998ecf8427e" }
+          }
+        }
+      ]
+    }
+    ```
+  - The dispatcher asynchronously invokes the Lambda runner in a background worker thread (`TaskExecutor`), preventing upload blocking.
+
+---
+
+### 4. Serverless Execution Engine (AWS Lambda)
+
+- **Polyglot Runtime Support**:
+  - **Python** (`python3.9`, `python3.11`)
+  - **Node.js** (`nodejs18.x`, `nodejs20.x`)
+  - **Java** (`java17`)
+  - **Bash / Shell** (`provided.al2`)
+- **Execution Isolation**:
+  - In Docker mode, Lambda spins up a runtime container mounting function code to `/var/task` with ephemeral execution limits.
+  - In Host mode, code is written to isolated temporary execution directories (`minicloud-data/lambda-tmp/`) and executed with timeout safeguards.
+- **Real-Time WebSocket Output**:
+  - Stderr/stdout output from functions is published to WebSocket topic `/topic/lambda-logs/{functionName}` for live console debugging.
+
+---
+
+### 5. Telemetry & Cost Rightsizing Advisor
+
+- **Hardware Telemetry (OSHI)**:
+  - Background probe samples system-wide and process-level CPU, RAM, Disk I/O, and Thread counts every 60 seconds.
+  - Metrics are written to `system_metrics` and exposed via `/actuator/metrics`.
+- **Rightsizing Algorithm**:
+  - Samples historical CPU and memory utilization across active instances.
+  - An instance is flagged as `DOWNSIZE` if its average CPU utilization is below 10.0% over active sampling windows.
+  - Calculates predicted monthly cost savings based on instance family delta (e.g., `t2.large` ($0.0928/hr) ➔ `t2.nano` ($0.0058/hr)).
+
+---
+
+## 🗄️ Database & Concurrency Model
 
 ```
-minicloud-data/
-├── db/           ← H2 database files
-├── logs/         ← Rolling application logs (10MB, 30 days)
-├── storage/      ← S3 object storage (file system)
-├── lambda-tmp/   ← Lambda function artifact cache
-└── rds/          ← Per-instance H2 RDS databases
++-------------------------------------------------------------------+
+|                        Concurrency Architecture                   |
+|                                                                   |
+|   [ Inbound HTTP / WS Requests ]                                  |
+|                 |                                                 |
+|                 v                                                 |
+|   [ Spring Thread Pool: Core 4, Max 8, Queue 50 ]                 |
+|                 |                                                 |
+|        +--------+--------+                                        |
+|        v                 v                                        |
+|  [ JPA / HikariCP ]  [ Async TaskExecutor ]  [ Scheduled Tasks ]  |
+|  (Max 5, Min 2)      (Lambda Dispatch)       (Metric Sampling)    |
+|        |                 |                          |             |
+|        +-----------------+--------------------------+             |
+|                          v                                        |
+|           [ H2 Database / PostgreSQL Engine ]                     |
++-------------------------------------------------------------------+
 ```
+
+- **HikariCP Connection Pool**: Configured with 5 connections maximum for optimized laptop footprint.
+- **Caffeine L2 Cache**: High-performance in-memory cache for policy resolution and IAM lookups (500 max entries, 300s TTL).
+- **Graceful Shutdown**: Lifecycle timeout ensures executing Lambda tasks and database transactions flush cleanly before termination.

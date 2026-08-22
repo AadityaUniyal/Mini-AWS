@@ -30,19 +30,19 @@ public class StorageService {
     }
 
     public void createBucketDirectory(UUID userId, String bucketName) throws IOException {
-        Path path = Path.of(basePath, userId.toString(), bucketName);
+        Path path = Path.of(basePath, userId.toString(), bucketName).toAbsolutePath().normalize();
         Files.createDirectories(path);
         log.info("Created bucket directory: {}", path);
     }
 
     public void deleteBucketDirectory(UUID userId, String bucketName) {
-        Path path = Path.of(basePath, userId.toString(), bucketName);
+        Path path = Path.of(basePath, userId.toString(), bucketName).toAbsolutePath().normalize();
         deleteRecursive(path.toFile());
         log.info("Deleted bucket directory: {}", path);
     }
 
     public String writeObject(UUID userId, String bucketName, String objectKey, InputStream content) throws IOException {
-        Path dir = Path.of(basePath, userId.toString(), bucketName);
+        Path dir = Path.of(basePath, userId.toString(), bucketName).toAbsolutePath().normalize();
         Files.createDirectories(dir);
 
         Path filePath = dir.resolve(objectKey).normalize();
@@ -80,7 +80,7 @@ public class StorageService {
     }
 
     public boolean isBucketEmpty(UUID userId, String bucketName) {
-        Path path = Path.of(basePath, userId.toString(), bucketName);
+        Path path = Path.of(basePath, userId.toString(), bucketName).toAbsolutePath().normalize();
         File dir = path.toFile();
         if (!dir.exists()) return true;
         String[] children = dir.list();

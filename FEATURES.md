@@ -1,168 +1,136 @@
-# 📖 MiniCloud: Architectural Feature Directory & Deep Dive
+# ⚡ MiniCloud: Complete Features & Parity Matrix
 
-This document details the inner workings, system design, object-oriented (OOP) design patterns, database schemas, and workflow execution steps for every simulated AWS service inside MiniCloud.
-
----
-
-## 1. 🔐 Identity & Access Management (IAM)
-
-### Architecture & Design Patterns
-*   **RBAC & ABAC Hybrid**: Supports both Role-Based Access Control (`UserRole` mapping to `ADMIN`/`USER`) and Attribute-Based Access Control (using JSON Policies evaluating context attributes).
-*   **Composite Pattern**: Policies contain a hierarchy of statements, each specifying arrays of actions, resources, and conditions.
-*   **Singleton/Component Evaluator**: [PolicyEvaluator.java](file:///c:/Users/HP/OneDrive/Desktop/MINI-AWS/Mini-AWS/minicloud-api/src/main/java/com/minicloud/api/iam/PolicyEvaluator.java) is a stateless Spring `@Component` that processes authorization evaluations.
-
-### Workflow & Logic Flow
-When an API request hits a controller protected by permission checks (e.g., launching an EC2 instance), the following authorization routine is executed:
-
-```mermaid
-graph TD
-    A[API Request Action] --> B{Is User Root?}
-    B -- Yes --> C[Access ALLOWED]
-    B -- No --> D[Evaluate Inline Policy JSON]
-    D --> E{Match Deny?}
-    E -- Yes --> F[Access DENIED]
-    E -- No --> G{Match Allow?}
-    G -- Yes --> H[Set Allowed = true]
-    G -- No --> I[Evaluate Attached Policies JSON]
-    I --> J{Match Deny?}
-    J -- Yes --> F
-    J -- No --> K{Match Allow?}
-    K -- Yes --> L[Set Allowed = true]
-    K -- No --> M[Check final Allowed state]
-    M -- Allowed is true --> C
-    M -- Allowed is false --> F
-```
-
-### Context variables and Conditions
-*   **Variable Substitution**: Before parsing the JSON document, the parser substitutes runtime context variables:
-    *   `${aws:username}` maps to the active user's username.
-    *   `${aws:PrincipalAccount}` maps to the user's 12-digit AWS account ID.
-*   **Condition Evaluators**: Condition matching supports array verification:
-    *   `StringEquals`: Case-sensitive string comparison.
-    *   `StringLike`: Case-insensitive wildcard pattern matching (e.g. `s3:Get*`).
-    *   `IpAddress`: Prefix matching for CIDRs (e.g., source IP matches `192.168.1.0/24`).
+This document provides a comprehensive specification of every cloud capability simulated within **MiniCloud**, including technical parameters, API routes, JSON payloads, and real-world AWS equivalents.
 
 ---
 
-## 2. 💻 Elastic Compute Cloud (EC2)
+## 📋 Comprehensive Feature Matrix
 
-### Architecture & Design Patterns
-*   **Observer/Manager Pattern**: [ProcessManager.java](file:///c:/Users/HP/OneDrive/Desktop/MINI-AWS/Mini-AWS/minicloud-api/src/main/java/com/minicloud/api/compute/ProcessManager.java) manages and tracks subprocesses mapped in a thread-safe `ConcurrentHashMap`.
-*   **Strategy Pattern**: Commands are processed by either the Docker container execution sandbox or the native host execution fallback based on startup diagnostic checks.
-
-### execution flow:
-```
-  [User Action: Launch EC2]
-              │
-              ▼
-    [CommandSanitizer]  ──────► (Blocks injection: ;, &&, ||, backticks, $())
-              │
-              ▼
-  [ProcessManager checks Docker]
-        /           \
-    (Active)     (Inactive)
-      /               \
-     ▼                 ▼
-[Docker Sandbox]   [Native OS Subprocess]
-- Spawn alpine      - Windows: cmd.exe /c
-- Isolation         - Linux: bash -c
-     │                 │
-     └────────┬────────┘
-              │
-              ▼
-  [Process ID mapped to DB]
-```
-
-### Networking Advisor
-EC2 instances are assigned static private IPs (typically `172.31.x.x` ranges mapping to standard AWS subnets) and public elastic IPs using a pseudo-random networking allocation strategy inside `NetworkingAdvisor`.
+| Domain | AWS Service | MiniCloud Simulation Feature | Status |
+|---|---|---|---|
+| **Identity** | AWS IAM | Root vs IAM Users, JSON Policies, Access Keys, RBAC | ✅ Complete |
+| **Compute** | Amazon EC2 | Virtual Machines, Instance Types, State Machine, Security Groups | ✅ Complete |
+| **Compute** | Auto Scaling | Capacity Management, Health Checks, Self-Healing Recovery | ✅ Complete |
+| **Storage** | Amazon S3 | Buckets, Object Storage, Static Web Hosting, Pre-signed URLs | ✅ Complete |
+| **Serverless** | AWS Lambda | Polyglot Runtimes, Synchronous/Async Invocations, WebSocket Logs | ✅ Complete |
+| **Eventing** | EventBridge / S3 Events | Asynchronous S3-to-Lambda Event Triggers | ✅ Complete |
+| **Database** | Amazon RDS | Managed H2/MySQL Engines, Automated Backups, Read Replicas | ✅ Complete |
+| **Networking** | Amazon VPC | CIDR Block Allocation, Subnets, Route Tables, Route 53 DNS | ✅ Complete |
+| **Security** | Security Groups & NACLs | Stateful firewall rules & Stateless subnet packet filters | ✅ Complete |
+| **Monitoring** | Amazon CloudWatch | Rolling Metric Aggregations, Alarm Thresholds, Notifications | ✅ Complete |
+| **Auditing** | AWS CloudTrail | Immutable Audit Event Logging, IP/Principal Tracing | ✅ Complete |
+| **FinOps** | Cost Explorer | Real-time Cost Ledger, Daily Accrual, Invoice Generation | ✅ Complete |
+| **Intelligence**| Compute Optimizer | Rightsizing Advisor with OSHI CPU Telemetry | ✅ Complete |
+| **Resilience** | Chaos Engineering | Targeted & Random Instance Termination Injections | ✅ Complete |
+| **Tooling** | AWS CLI | Full-featured Python CLI (`minicloud`) with Click + Rich | ✅ Complete |
+| **Desktop UI** | AWS Console | Pure Java Swing Desktop Dashboard with FlatLaf Theme | ✅ Complete |
 
 ---
 
-## 3. 🪣 Simple Storage Service (S3)
+## 🛠️ Feature Deep-Dives
 
-### Storage & Serialization Design
-*   **Hybrid Persistence**:
-    - **Database (`storage_objects`)**: Stores binary references, checksums (MD5 ETag), content lengths, content types, and bucket ownership relationships.
-    - **Local Disk System**: Serializes the raw binary stream directly under `./minicloud-data/storage/<bucket-name>/<object-key>`.
-*   **S3 Static Website Hosting**:
-    - A bucket can be toggled into website mode.
-    - Requests routed to `/site/<bucket-name>/<path>` are caught by `WebsiteController`.
-    - It reads the requested asset from local disk storage. If not found, it falls back to the bucket's configured `IndexDocument` (e.g., `index.html`) or serves the custom `ErrorDocument` (e.g., `error.html`) with a `404` status code.
-
----
-
-## 4. ⚡ AWS Lambda
-
-### Under the Hood
-*   **Mounting Logic**: Code execution mimics real AWS Lambda container mount patterns:
-    1. Downloads/resolves the function artifact from its configured S3 bucket.
-    2. Extracts/caches it in `./minicloud-data/lambda-tmp/<functionId>/`.
-    3. Mounts the folder to `/var/task` inside a corresponding runtime container:
-        - **Python**: `python:3.9-slim` running `python /var/task/<filename>`
-        - **Node.js**: `node:18-alpine` running `node /var/task/<filename>`
-        - **Java**: `openjdk:17-slim` running `java -cp /var/task/<filename> <handler>`
-        - **Go**: `golang:1.19-alpine` running `go run /var/task/<filename>`
-    4. Pipes input parameters directly into the container's stdin.
-    5. Captures the container's stdout/stderr streams.
-*   **CloudWatch Logs Ingestion**: Ingests stdout/stderr output lines directly into CloudWatch Log Streams under the log group `/aws/lambda/<function-name>`.
-
----
-
-## 5. 🌐 Virtual Private Cloud (VPC) & Networking
-
-### Stateless NACLs vs. Stateful Security Groups
-
-MiniCloud implements two distinct virtual firewall layers acting at different scopes:
-
-| Attribute | Security Groups (Stateful) | Network ACLs (NACLs) (Stateless) |
-|---|---|---|
-| **Acting Boundary** | Instance Level (EC2) | Subnet Boundary Level |
-| **State Nature** | Stateful (return traffic is automatically allowed) | Stateless (return traffic must be explicitly allowed) |
-| **Rule Application** | Evaluates all rules; allows traffic if any rule matches. Defaults to deny. | Evaluates rules sequentially from lowest to highest rule number. First match wins. |
-| **MiniCloud Class** | `NetworkingAdvisor` | `NetworkAclService` |
-
-### NACL Evaluation Workflow
-When traffic is routed by the reverse proxy (`ProxyService`), the request is checked before forwarding:
-
-```
-[Incoming Request] ──► [Evaluate Subnet NACL] ──► [Evaluate Instance Security Group] ──► [Forward to Port]
-                             │                                 │
-                         (Blocked)                         (Blocked)
-                             │                                 │
-                             ▼                                 ▼
-                     [403 Forbidden]                   [403 Forbidden]
+### 1. Identity & Access Management (IAM)
+- **Root Account Creation**: Register with root email and secure password. Receives a unique 12-digit AWS Account ID.
+- **IAM Users**: Create sub-users with scoped permissions, individual login passwords, or API access keys.
+- **JSON Policy Engine**: Supports full AWS Policy syntax:
+```json
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Effect": "Allow",
+      "Action": ["s3:GetObject", "s3:PutObject"],
+      "Resource": "arn:aws:s3:::prod-bucket/*"
+    },
+    {
+      "Effect": "Deny",
+      "Action": "ec2:TerminateInstances",
+      "Resource": "*"
+    }
+  ]
+}
 ```
 
 ---
 
-## 6. 📊 CloudWatch (Metrics & Logs) & CloudTrail (Auditing)
-
-### Operating System Metrics (OSHI)
-`MetricsService` utilizes native JVM bindings through the **OSHI (Operating System and Hardware Information)** library:
-- **CPU Utilization**: Samples system CPU load averages.
-- **RAM footprint**: Captures JVM and physical memory totals/availables.
-- **Disk IO**: Tracks space usage inside the storage volume.
-- These metrics are polled every 5 seconds and broadcasted to the desktop UI via WebSocket STOMP handlers.
-
-### Immutable Audit Logs (CloudTrail)
-The `AuditService` records system-wide transactions:
-- Every action (e.g. `RunInstances`, `CreateBucket`, `PutObject`, `InvokeLambda`) writes a log entry.
-- Contains: `username`, `service`, `action`, `resource`, `status` (success/failure details), and `timestamp`.
-- Errors/Authorization failures are logged with an `Access Denied` flag.
+### 2. Elastic Compute Cloud (EC2)
+- **Instance Types**:
+  - `t2.nano` (1 vCPU, 0.5 GB RAM, $0.0058/hr)
+  - `t2.micro` (1 vCPU, 1.0 GB RAM, $0.0116/hr)
+  - `t2.small` (1 vCPU, 2.0 GB RAM, $0.0230/hr)
+  - `t2.medium` (2 vCPU, 4.0 GB RAM, $0.0464/hr)
+  - `t2.large` (2 vCPU, 8.0 GB RAM, $0.0928/hr)
+- **Instance Lifecycle**: Launch (`POST /api/v1/compute/instances`), Stop (`POST /api/v1/compute/instances/{id}/stop`), Start (`POST /api/v1/compute/instances/{id}/start`), Terminate (`DELETE /api/v1/compute/instances/{id}`).
+- **Sandboxed Execution**: Run interactive commands inside VM instances via REST endpoint `/api/v1/compute/instances/{id}/exec`.
 
 ---
 
-## 7. 💸 Billing & Auto-Scaling
+### 3. Simple Storage Service (S3) & Event Triggers
+- **Bucket Management**: Create, list, configure public read access, and delete buckets.
+- **Object Operations**: Upload binary/text files, download files with MD5 ETag validation, and stream file contents.
+- **Static Website Hosting**: Host single-page websites or static assets accessible at `http://localhost:8080/site/{bucket-name}/index.html`.
+- **S3-to-Lambda Event Triggers**:
+  - Create trigger: `POST /api/v1/lambda/triggers`
+  - Payload:
+    ```json
+    {
+      "bucketName": "media-uploads",
+      "functionName": "image-resizer",
+      "eventType": "OBJECT_CREATED"
+    }
+    ```
+  - Automatically dispatches events to Lambda whenever files matching the event pattern are uploaded.
 
-### Billing Cost Accumulation
-`BillingService` monitors active resources using a background scheduler:
-*   Running EC2 instances: Accumulated at `$0.0116` per minute (simulating `t2.micro` rates).
-*   Managed RDS instances: Accumulated at `$0.0350` per minute.
-*   S3 storage storage footprint: Calculated per GB-month.
-*   Invoices are generated monthly containing detailed cost listings, itemized usage, and total calculations.
+---
 
-### Auto-Scaling Replica Manager
-*   Tracks registered Auto Scaling Groups (ASGs).
-*   Whenever a CloudWatch Alarm goes into `ALARM` state (e.g., CPU metric > 80% for 2 evaluation periods), it calls the Auto-Scaling controller.
-*   The controller invokes `ComputeService` to launch clone EC2 instances using the configured launch template, adding them to the routing group.
-*   Conversely, when the scale-down alarm is triggered (e.g. CPU < 20%), it terminates instances to scale down.
+### 4. AWS Lambda (Serverless Compute)
+- **Supported Runtimes**: Python (`python3.9`, `python3.11`), Node.js (`nodejs18.x`), Java (`java17`), Shell (`provided.al2`).
+- **Synchronous Invocations**:
+  - Endpoint: `POST /api/v1/lambda/functions/{name}/invoke`
+  - Request Body: JSON payload passed as `event` parameter to the entry point handler.
+  - Response: Function return value, execution duration (ms), memory consumed (MB), and billed duration.
+- **Live Output Streaming**: Real-time console logs streamed over WebSocket (`/topic/lambda-logs/{name}`).
+
+---
+
+### 5. Telemetry, Rightsizing Advisor & Billing
+- **Real-Time Cost Tracking**: Every second of compute instance uptime, gigabyte of S3 storage, and millisecond of Lambda execution is recorded in the billing ledger.
+- **Rightsizing Advisor Endpoint**: `GET /api/v1/billing/recommendations`
+  - Scans instances with average CPU < 10% and computes potential monthly cost reduction:
+  ```json
+  {
+    "recommendations": [
+      {
+        "instanceId": "i-0a8b9c1d2e",
+        "instanceName": "analytics-worker",
+        "currentType": "t2.large",
+        "recommendedType": "t2.nano",
+        "averageCpuUtilization": 4.2,
+        "currentMonthlyCost": 66.82,
+        "projectedMonthlyCost": 4.18,
+        "estimatedMonthlySavings": 62.64,
+        "action": "DOWNSIZE",
+        "reason": "Instance CPU utilization is below 10% over sampling window."
+      }
+    ],
+    "totalPotentialMonthlySavings": 62.64
+  }
+  ```
+
+---
+
+### 6. Chaos Engineering & Self-Healing Auto Scaling
+- **Chaos Injection Endpoint**: `POST /api/v1/chaos/terminate-random-instance`
+  - Randomly selects and terminates an active instance belonging to an Auto Scaling Group.
+- **Self-Healing Verification**:
+  - The Auto Scaling evaluation engine detects the capacity drop during its periodic health evaluation cycle.
+  - Automatically launches a replacement VM instance to maintain the desired instance count and broadcasts the recovery event over WebSocket.
+
+---
+
+### 7. Java Swing Desktop Console
+- Built with **FlatLaf Dark** theming matching the modern AWS Management Console look and feel.
+- Features:
+  - Visual resource cards for Compute, S3, RDS, Lambda, and IAM.
+  - Live system performance graphs (CPU load, Heap usage, Active threads).
+  - Tabbed dashboards for launching instances, uploading files, inspecting policies, and monitoring billing.
