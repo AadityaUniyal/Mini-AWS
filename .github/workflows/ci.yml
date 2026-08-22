@@ -43,7 +43,7 @@ jobs:
 
     - name: Build Docker Image
       run: |
-        docker build -t miniaws-api:latest ./minicloud-api
+        docker build -t miniaws-api:latest -f minicloud-api/Dockerfile .
 
     - name: Upload Build Artifacts
       uses: actions/upload-artifact@v4
