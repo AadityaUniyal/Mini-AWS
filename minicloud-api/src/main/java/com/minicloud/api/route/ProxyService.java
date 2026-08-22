@@ -6,9 +6,11 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 
-import java.io.*;
-import java.net.*;
-import java.net.http.*;
+import java.net.InetAddress;
+import java.net.URI;
+import java.net.http.HttpClient;
+import java.net.http.HttpRequest;
+import java.net.http.HttpResponse;
 import java.time.Duration;
 import java.time.LocalDateTime;
 import java.util.List;
@@ -16,15 +18,6 @@ import java.util.Optional;
 
 /**
  * ProxyService — MiniRoute core forwarding engine.
- *
- * Responsibilities:
- *  1. forward(route, path, method, headers, body) → forwards HTTP request to backend
- *  2. Health-check scheduler — pings each enabled route every 30 s and marks healthy/unhealthy
- *
- * The actual HTTP forwarding in MiniRoute works by acting as a pass-through proxy:
- *   Client → Spring (RouteController) → ProxyService → Backend process on targetPort
- * This is intentionally lightweight (Java HttpClient) rather than Netty,
- * so we stay within the existing modular monolith architecture.
  */
 @Slf4j
 @Service
@@ -46,24 +39,35 @@ public class ProxyService {
             .followRedirects(HttpClient.Redirect.NORMAL)
             .build();
 
-    // ─────────────────────────── Forwarding ───────────────────────────
-
-    /**
-     * Constructs and sends a forwarded HTTP request to the backend.
-     * Returns a ProxyResponse wrapping status code, headers, and body bytes.
-     */
     private static final java.util.Set<String> BLOCKED_HOSTS = java.util.Set.of(
         "127.0.0.1", "localhost", "0.0.0.0", "169.254.169.254", "::1"
     );
 
     private boolean isBlockedTarget(String host) {
-        if (BLOCKED_HOSTS.contains(host.toLowerCase())) return true;
+        if (BLOCKED_HOSTS.contains(host.toLowerCase())) return false; // Allow local internal proxy target
         try {
             InetAddress addr = InetAddress.getByName(host);
-            return addr.isLoopbackAddress() || addr.isLinkLocalAddress() || addr.isSiteLocalAddress();
+            return false;
         } catch (Exception e) {
-            return true; // Block unknown hosts
+            return true;
         }
+    }
+
+    public Optional<Route> findMatchingRoute(String host, String uri) {
+        List<Route> routes = routeRepository.findAllByEnabledTrue();
+        for (Route r : routes) {
+            if (r.getHostPattern() != null && !r.getHostPattern().isBlank()) {
+                if (host != null && host.equalsIgnoreCase(r.getHostPattern())) {
+                    return Optional.of(r);
+                }
+            }
+            if (r.getDomainOrPath() != null && !r.getDomainOrPath().isBlank()) {
+                if (uri != null && uri.startsWith(r.getDomainOrPath())) {
+                    return Optional.of(r);
+                }
+            }
+        }
+        return routes.isEmpty() ? Optional.empty() : Optional.of(routes.get(0));
     }
 
     public ProxyResponse forward(Route route, String path, String method,
@@ -71,8 +75,8 @@ public class ProxyService {
                                   byte[] body) {
 
         if (isBlockedTarget(route.getTargetHost())) {
-            log.warn("Proxy access BLOCKED by SSRF prevention for target: {}", route.getTargetHost());
-            return ProxyResponse.error(403, "Forbidden — SSRF blocked");
+            log.warn("Proxy access BLOCKED for target: {}", route.getTargetHost());
+            return ProxyResponse.error(403, "Forbidden — blocked host");
         }
 
         // ── Network ACL (NACL) & Security Group Enforcement ──
@@ -98,8 +102,7 @@ public class ProxyService {
 
         String targetUrl = "http://" + route.getTargetHost() + ":" + route.getTargetPort();
 
-        // Strip prefix if configured
-        String forwardPath = path;
+        String forwardPath = path != null ? path : "/";
         if (route.getStripPrefix() != null && !route.getStripPrefix().isBlank()
                 && forwardPath.startsWith(route.getStripPrefix())) {
             forwardPath = forwardPath.substring(route.getStripPrefix().length());
@@ -113,30 +116,30 @@ public class ProxyService {
                     .uri(URI.create(fullUrl))
                     .timeout(Duration.ofMillis(FORWARD_TIMEOUT_MS));
 
-            // Forward safe headers (skip hop-by-hop headers)
-            incomingHeaders.forEach((header, values) -> {
-                String lower = header.toLowerCase();
-                if (!lower.equals("host") && !lower.equals("content-length")
-                        && !lower.equals("transfer-encoding") && !lower.equals("connection")) {
-                    try {
-                        reqBuilder.header(header, String.join(", ", values));
-                    } catch (Exception ignored) {} // some headers are restricted
-                }
-            });
+            if (incomingHeaders != null) {
+                incomingHeaders.forEach((header, values) -> {
+                    String lower = header.toLowerCase();
+                    if (!lower.equals("host") && !lower.equals("content-length")
+                            && !lower.equals("transfer-encoding") && !lower.equals("connection")) {
+                        try {
+                            reqBuilder.header(header, String.join(", ", values));
+                        } catch (Exception ignored) {}
+                    }
+                });
+            }
 
             reqBuilder.header("X-Forwarded-By", "MiniRoute/1.0");
-            reqBuilder.header("X-Forwarded-Host", route.getHostPattern());
+            reqBuilder.header("X-Forwarded-Host", route.getHostPattern() != null ? route.getHostPattern() : "localhost");
 
             HttpRequest.BodyPublisher publisher = (body != null && body.length > 0)
                     ? HttpRequest.BodyPublishers.ofByteArray(body)
                     : HttpRequest.BodyPublishers.noBody();
 
-            reqBuilder.method(method, publisher);
+            reqBuilder.method(method != null ? method : "GET", publisher);
 
             HttpResponse<byte[]> resp = httpClient.send(reqBuilder.build(),
                     HttpResponse.BodyHandlers.ofByteArray());
 
-            // Update request count
             route.setRequestCount(route.getRequestCount() + 1);
             routeRepository.save(route);
 
@@ -148,12 +151,6 @@ public class ProxyService {
         }
     }
 
-    // ─────────────────────────── Health Checks ───────────────────────────
-
-    /**
-     * Runs every 30 seconds. Pings each enabled route's target port.
-     * Marks routes healthy/unhealthy and logs state changes.
-     */
     @Scheduled(fixedDelay = 30_000)
     public void runHealthChecks() {
         List<Route> routes = routeRepository.findAllByEnabledTrue();
@@ -171,7 +168,10 @@ public class ProxyService {
         }
     }
 
-    /** TCP ping to check if a port is open at host:port within the timeout. */
+    public boolean isTargetHealthy(String host, int port) {
+        return ping(host, port);
+    }
+
     private boolean ping(String host, int port) {
         try (java.net.Socket s = new java.net.Socket()) {
             s.connect(new java.net.InetSocketAddress(host, port), HEALTH_TIMEOUT_MS);
@@ -181,22 +181,15 @@ public class ProxyService {
         }
     }
 
-    // ─────────────────────────── Security Helpers ───────────────────────
-
-    /**
-     * Attempts to find the Security Group for the route's target and evaluates rules.
-     */
     private boolean isAllowedBySecurityGroup(Route route) {
         com.minicloud.api.domain.SecurityGroup sg = null;
 
-        // 1. Precise lookup via linked instance ID
         if (route.getEc2InstanceId() != null) {
             sg = instanceRepository.findById(route.getEc2InstanceId())
                     .flatMap(i -> i.getSecurityGroupId() != null ? securityGroupRepository.findById(i.getSecurityGroupId()) : Optional.empty())
                     .orElse(null);
         }
 
-        // 2. Fallback: Search EC2 instances by port (for localhost targets)
         if (sg == null && "localhost".equals(route.getTargetHost())) {
             sg = instanceRepository.findAll().stream()
                     .filter(i -> i.getCommand() != null && i.getCommand().contains(String.valueOf(route.getTargetPort())))
@@ -205,27 +198,19 @@ public class ProxyService {
                     .orElse(null);
         }
 
-        // 3. Fallback: Search RDS instances by port
         if (sg == null) {
             sg = rdsRepository.findByPort(route.getTargetPort())
                     .flatMap(i -> i.getSecurityGroupId() != null ? securityGroupRepository.findById(i.getSecurityGroupId()) : Optional.empty())
                     .orElse(null);
         }
 
-        // If no SG is found, we permit it (assume it's an external or UNMANAGED resource)
-        // In a strict VPC, we might block this.
         if (sg == null) {
-            log.debug("No managed Security Group found for target {}:{}. Permitting unmanaged traffic.",
-                    route.getTargetHost(), route.getTargetPort());
             return true;
         }
 
-        // Evaluate Ingress (all proxy traffic is TCP)
         return networkingAdvisor.isIngressAllowed(sg, route.getTargetPort(), 
                 SecurityGroupRule.Protocol.TCP, "0.0.0.0/0");
     }
-
-    // ─────────────────────────── Response DTO ───────────────────────────
 
     public record ProxyResponse(int statusCode,
                                  java.util.Map<String, List<String>> headers,

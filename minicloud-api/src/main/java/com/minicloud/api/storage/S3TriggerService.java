@@ -29,6 +29,11 @@ public class S3TriggerService {
     private final FunctionRepository functionRepository;
 
     @Transactional
+    public TriggerResponse createTrigger(CreateTriggerRequest request) {
+        return toResponse(createTrigger(request, null));
+    }
+
+    @Transactional
     public S3LambdaTrigger createTrigger(CreateTriggerRequest request, UUID userId) {
         if (request.bucketName() == null || request.bucketName().isBlank()) {
             throw new IllegalArgumentException("Bucket name is required");
@@ -56,6 +61,12 @@ public class S3TriggerService {
         log.info("Registered S3 Lambda Trigger: ID={}, bucket={}, function={}, events={}",
                 saved.getId(), saved.getBucketName(), saved.getFunctionName(), saved.getEvents());
         return saved;
+    }
+
+    public List<TriggerResponse> listTriggers(String bucketName) {
+        return listTriggers(bucketName, null).stream()
+                .map(this::toResponse)
+                .collect(Collectors.toList());
     }
 
     public List<S3LambdaTrigger> listTriggers(String bucketName, UUID userId) {

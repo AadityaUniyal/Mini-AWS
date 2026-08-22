@@ -10,6 +10,7 @@ import lombok.NoArgsConstructor;
 @NoArgsConstructor
 @AllArgsConstructor
 public class SecurityGroupRuleDto {
+    private String type;     // INGRESS, EGRESS
     private String protocol; // TCP, UDP, ICMP, ALL
     private Integer fromPort;
     private Integer toPort;

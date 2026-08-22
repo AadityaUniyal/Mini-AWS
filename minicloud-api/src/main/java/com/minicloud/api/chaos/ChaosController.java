@@ -1,9 +1,12 @@
 package com.minicloud.api.chaos;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.minicloud.api.auth.SecurityUtils;
+import com.minicloud.api.auth.UserPrincipal;
 import com.minicloud.api.dto.ApiResponse;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
+import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.servlet.http.HttpServletRequest;
 import lombok.RequiredArgsConstructor;
@@ -15,23 +18,20 @@ import java.util.stream.Collectors;
 
 /**
  * ChaosController — REST API for Chaos Monkey experiments and resilience testing.
- *
- * Exposes:
- *  POST /api/v1/chaos/terminate-random-instance
  */
 @Slf4j
 @RestController
 @RequestMapping("/api/v1/chaos")
 @RequiredArgsConstructor
 @Tag(name = "Chaos Engineering", description = "Chaos Monkey injection and automated self-healing resilience")
+@SecurityRequirement(name = "BearerAuth")
 public class ChaosController {
 
     private final ChaosService chaosService;
     private final ObjectMapper objectMapper;
 
     @PostMapping("/terminate-random-instance")
-    @Operation(summary = "Terminate a random running instance in an ASG/fleet and trigger self-healing recovery",
-            description = "Simulates instance failure (Chaos Monkey). The Auto Scaling subsystem detects the capacity deficit and launches a replacement instance.")
+    @Operation(summary = "Terminate a random running instance in an ASG/fleet and trigger self-healing recovery")
     public ResponseEntity<ApiResponse<ChaosResultDTO>> terminateRandomInstance(
             @Parameter(description = "Optional Auto Scaling Group ID or name")
             @RequestParam(required = false) String autoScalingGroupId,
@@ -44,6 +44,13 @@ public class ChaosController {
         String effectiveAsgId = autoScalingGroupId;
         String effectiveAccountId = accountId;
         String effectiveGroupName = groupName;
+
+        try {
+            UserPrincipal principal = SecurityUtils.getAuthenticatedPrincipal();
+            if (principal.getAccountId() != null) {
+                effectiveAccountId = principal.getAccountId();
+            }
+        } catch (Exception ignored) {}
 
         try {
             if (request != null) {
@@ -64,14 +71,12 @@ public class ChaosController {
                 }
             }
         } catch (Exception e) {
-            log.debug("No JSON body or unparseable body provided in chaos request: {}", e.getMessage());
+            log.warn("Failed to parse chaos request body: {}", e.getMessage());
         }
 
-        ChaosResultDTO result = chaosService.terminateRandomInstanceAndHeal(
-                effectiveAsgId, effectiveAccountId, effectiveGroupName);
+        SecurityUtils.validateAccountOwnership(effectiveAccountId);
 
-        return ResponseEntity.ok(ApiResponse.ok(
-                "Chaos Monkey successfully terminated random instance and triggered self-healing replenishment",
-                result));
+        ChaosResultDTO result = chaosService.terminateRandomInstanceAndHeal(effectiveAsgId, effectiveAccountId, effectiveGroupName);
+        return ResponseEntity.ok(ApiResponse.ok("Chaos experiment executed", result));
     }
 }

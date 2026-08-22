@@ -1,14 +1,18 @@
 package com.minicloud.api.billing;
 
+import com.minicloud.api.auth.SecurityUtils;
+import com.minicloud.api.auth.UserPrincipal;
 import com.minicloud.api.domain.BillingRecord;
 import com.minicloud.api.dto.ApiResponse;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
+import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
+import java.math.BigDecimal;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -18,10 +22,19 @@ import java.util.Map;
 @RequestMapping("/api/v1/billing")
 @Tag(name = "Billing", description = "AWS-style Billing & Cost Management")
 @RequiredArgsConstructor
+@SecurityRequirement(name = "BearerAuth")
 public class BillingController {
 
     private final BillingService billingService;
     private final RightsizingAdvisorService rightsizingAdvisorService;
+
+    @GetMapping("/summary")
+    @Operation(summary = "Get billing summary for current authenticated account")
+    public ResponseEntity<ApiResponse<Map<String, Object>>> getCurrentSummary() {
+        UserPrincipal principal = SecurityUtils.getAuthenticatedPrincipal();
+        String accountId = principal.getAccountId() != null ? principal.getAccountId() : "123456789012";
+        return getSummary(accountId);
+    }
 
     @GetMapping("/recommendations")
     @Operation(summary = "Get cost rightsizing recommendations for underutilized instances",
@@ -29,14 +42,24 @@ public class BillingController {
     public ResponseEntity<ApiResponse<RightsizingResponseDTO>> getRecommendations(
             @Parameter(description = "Optional AWS Account ID to filter recommendations")
             @RequestParam(required = false) String accountId) {
-        RightsizingResponseDTO response = rightsizingAdvisorService.getRecommendations(accountId);
+        
+        String effectiveAccountId = accountId;
+        try {
+            UserPrincipal principal = SecurityUtils.getAuthenticatedPrincipal();
+            if (principal.getAccountId() != null) {
+                effectiveAccountId = principal.getAccountId();
+            }
+        } catch (Exception ignored) {}
+
+        RightsizingResponseDTO response = rightsizingAdvisorService.getRecommendations(effectiveAccountId);
         return ResponseEntity.ok(ApiResponse.ok("Rightsizing recommendations generated", response));
     }
 
     @GetMapping("/summary/{accountId}")
     @Operation(summary = "Get billing summary for an account")
     public ResponseEntity<ApiResponse<Map<String, Object>>> getSummary(@PathVariable String accountId) {
-        java.math.BigDecimal total = billingService.getMonthToDateEstimate(accountId);
+        SecurityUtils.validateAccountOwnership(accountId);
+        BigDecimal total = billingService.getMonthToDateEstimate(accountId);
         List<BillingRecord> records = billingService.getAccountBills(accountId);
         
         Map<String, Object> response = new HashMap<>();
@@ -58,53 +81,26 @@ public class BillingController {
         
         Map<String, Object> estimate = new LinkedHashMap<>();
         
-        double hourlyRate = switch (resourceType.toUpperCase()) {
-            case "EC2" -> getEc2Rate(instanceType);
-            case "RDS" -> getRdsRate(instanceType);
-            case "S3" -> 0.02 / (30 * 24);  // $0.02 per GB-month converted to per hour
-            case "LAMBDA" -> 0.0000002;     // $0.0000002 per request
-            default -> throw new IllegalArgumentException("Unknown resource type: " + resourceType);
-        };
+        double hourlyRate = 0.05;
+        if ("RDS".equalsIgnoreCase(resourceType)) {
+            hourlyRate = 0.10;
+        } else if ("S3".equalsIgnoreCase(resourceType)) {
+            hourlyRate = 0.02 / (30.0 * 24.0); // Cost per GB-hour
+        } else if (instanceType != null) {
+            try {
+                com.minicloud.api.domain.InstanceType type = com.minicloud.api.domain.InstanceType.valueOf(instanceType.toUpperCase().replace(".", "_"));
+                hourlyRate = type.getCostPerHour();
+            } catch (Exception ignored) {}
+        }
         
         estimate.put("resourceType", resourceType);
-        estimate.put("instanceType", instanceType != null ? instanceType : "N/A");
-        estimate.put("perMinute", String.format("$%.6f", hourlyRate / 60));
-        estimate.put("perHour", String.format("$%.4f", hourlyRate));
-        estimate.put("perDay", String.format("$%.2f", hourlyRate * 24));
-        estimate.put("perMonth", String.format("$%.2f", hourlyRate * 24 * 30));
+        estimate.put("instanceType", instanceType != null ? instanceType : "STANDARD");
         estimate.put("currency", "USD");
+        estimate.put("perMinute", Math.round((hourlyRate / 60.0) * 10000.0) / 10000.0);
+        estimate.put("perHour", Math.round(hourlyRate * 100.0) / 100.0);
+        estimate.put("perDay", Math.round(hourlyRate * 24.0 * 100.0) / 100.0);
+        estimate.put("perMonth", Math.round(hourlyRate * 24.0 * 30.0 * 100.0) / 100.0);
         
         return ResponseEntity.ok(ApiResponse.ok("Cost estimate calculated", estimate));
-    }
-
-    /**
-     * Get EC2 hourly rate based on instance type
-     */
-    private double getEc2Rate(String instanceType) {
-        if (instanceType == null) return 0.05; // default rate
-        
-        return switch (instanceType.toUpperCase()) {
-            case "T2_MICRO" -> 0.0116;   // AWS t2.micro rate
-            case "T2_SMALL" -> 0.023;    // AWS t2.small rate
-            case "T2_MEDIUM" -> 0.046;   // AWS t2.medium rate
-            case "M5_LARGE" -> 0.096;    // AWS m5.large rate
-            case "C5_XLARGE" -> 0.17;    // AWS c5.xlarge rate
-            case "R5_LARGE" -> 0.126;    // AWS r5.large rate
-            default -> 0.05;             // fallback rate
-        };
-    }
-
-    /**
-     * Get RDS hourly rate based on instance type
-     */
-    private double getRdsRate(String instanceType) {
-        if (instanceType == null) return 0.10; // default RDS rate
-        
-        return switch (instanceType.toUpperCase()) {
-            case "DB_T2_MICRO" -> 0.017;   // AWS db.t2.micro rate
-            case "DB_T2_SMALL" -> 0.034;   // AWS db.t2.small rate
-            case "DB_M5_LARGE" -> 0.192;   // AWS db.m5.large rate
-            default -> 0.10;               // fallback rate
-        };
     }
 }

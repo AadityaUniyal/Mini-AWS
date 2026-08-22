@@ -14,6 +14,9 @@ public interface RouteRepository extends JpaRepository<Route, UUID> {
     @Query("SELECT r FROM Route r WHERE r.domainOrPath = :value")
     Optional<Route> findByDomainOrPath(@Param("value") String value);
     Optional<Route> findByUserIdAndName(UUID userId, String name);
+    Optional<Route> findByAccountIdAndName(String accountId, String name);
+    Optional<Route> findByIdAndAccountId(UUID id, String accountId);
     List<Route> findByUserId(UUID userId);
+    List<Route> findByAccountId(String accountId);
     List<Route> findAllByEnabledTrue();
 }

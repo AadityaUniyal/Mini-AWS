@@ -15,6 +15,7 @@ import org.springframework.util.StringUtils;
 import org.springframework.web.filter.OncePerRequestFilter;
 
 import java.io.IOException;
+import java.util.Map;
 import java.util.UUID;
 
 @Slf4j
@@ -31,12 +32,19 @@ public class JwtFilter extends OncePerRequestFilter {
         String token = extractTokenFromRequest(request);
 
         if (StringUtils.hasText(token) && jwtUtil.validateToken(token)) {
-            java.util.Map<String, Object> claims = jwtUtil.extractAllClaims(token);
-            String username = (String) claims.get("email");
+            Map<String, Object> claims = jwtUtil.extractAllClaims(token);
+            String username = jwtUtil.extractUsername(token);
+            if (username == null || username.isBlank()) {
+                username = (String) claims.get("username");
+            }
+            if (username == null || username.isBlank()) {
+                username = (String) claims.get("email");
+            }
+
             String role = (String) claims.get("role");
             String userIdStr = (String) claims.get("userId");
             String accountId = (String) claims.get("accountId");
-            boolean isRoot = claims.containsKey("isRoot") && (Boolean) claims.get("isRoot");
+            boolean isRoot = Boolean.TRUE.equals(claims.get("rootUser")) || Boolean.TRUE.equals(claims.get("isRoot"));
 
             if (username != null && SecurityContextHolder.getContext().getAuthentication() == null) {
                 java.util.List<SimpleGrantedAuthority> authorities = new java.util.ArrayList<>();
@@ -50,7 +58,7 @@ public class JwtFilter extends OncePerRequestFilter {
                         userId = UUID.fromString(userIdStr);
                     }
                 } catch (IllegalArgumentException e) {
-                    log.warn("Invalid userId format in token", e);
+                    log.warn("Invalid userId format in token: {}", userIdStr);
                 }
 
                 UserPrincipal principal = new UserPrincipal(username, userId, accountId, role, isRoot);

@@ -29,7 +29,7 @@ public class User {
     @Column(unique = true)
     private String email;
 
-    @Column(unique = true)
+    @Column(name = "account_id")
     private String accountId; // 12-digit AWS account ID
 
     private Boolean rootUser; // True for the account owner
@@ -41,6 +41,13 @@ public class User {
 
     @Column(columnDefinition = "TEXT")
     private String inlinePolicy; // Optional user-specific JSON policy document
+
+    private LocalDateTime lastLogin;
+    
+    @Builder.Default
+    private long loginCount = 0;
+    
+    private String lastIp;
 
     @Builder.Default
     @ManyToMany(fetch = FetchType.EAGER)

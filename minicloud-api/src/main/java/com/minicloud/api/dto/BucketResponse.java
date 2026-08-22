@@ -13,6 +13,8 @@ public class BucketResponse {
     private String id;
     private String name;
     private String ownerId;
+    private String userId;
+    private String accountId;
     private long objectCount;
     private long totalSizeBytes;
     private Integer retentionDays;

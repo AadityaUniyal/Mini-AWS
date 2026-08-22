@@ -10,5 +10,6 @@ import java.util.UUID;
 public interface AuditLogRepository extends JpaRepository<AuditLog, UUID> {
     List<AuditLog> findAllByUserIdOrderByTimestampDesc(UUID userId);
     List<AuditLog> findAllByUsername(String username);
+    List<AuditLog> findByAccountIdOrderByTimestampDesc(String accountId);
     List<AuditLog> findTop100ByOrderByTimestampDesc();
 }

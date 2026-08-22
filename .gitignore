@@ -7,8 +7,8 @@ target/
 *.ear
 
 # ── Runtime data (never commit) ───────────────────────────────
-minicloud-data/**
-!minicloud-data/**/.gitkeep
+minicloud-data/
+**/minicloud-data/**
 *.mv.db
 *.trace.db
 *.lock.db

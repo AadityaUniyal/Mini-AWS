@@ -1,11 +1,13 @@
 package com.minicloud.api.audit;
 
+import com.minicloud.api.auth.SecurityUtils;
+import com.minicloud.api.auth.UserPrincipal;
 import com.minicloud.api.domain.AuditLog;
 import com.minicloud.api.domain.AuditLogRepository;
 import com.minicloud.api.domain.UserRepository;
 import com.minicloud.api.monitoring.RealTimeDbService;
-import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.slf4j.MDC;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Service;
@@ -35,7 +37,6 @@ public class AuditService {
 
     public void recordAction(String username, String service, String action, String resource, String status, String details) {
         try {
-            // Resolve userId from username if possible
             UUID userId = null;
             String accountId = null;
             if (username != null) {
@@ -46,9 +47,13 @@ public class AuditService {
                 }
             }
 
+            String correlationId = MDC.get("correlationId");
+
             AuditLog auditLog = AuditLog.builder()
                     .username(username)
                     .userId(userId)
+                    .accountId(accountId)
+                    .correlationId(correlationId)
                     .service(service)
                     .action(action)
                     .resource(resource)
@@ -58,12 +63,11 @@ public class AuditService {
                     .build();
             auditLogRepository.save(auditLog);
             
-            // Record in real-time event stream
             if (realTimeDbService != null) {
-                String eventType = status.equals("SUCCESS") ? "ACTION_SUCCESS" : "ACTION_FAILURE";
-                String severity = status.equals("SUCCESS") ? "INFO" : "WARNING";
-                String eventData = String.format("{\"service\":\"%s\",\"action\":\"%s\",\"resource\":\"%s\",\"details\":\"%s\"}", 
-                    service, action, resource != null ? resource : "", details != null ? details : "");
+                String eventType = "SUCCESS".equalsIgnoreCase(status) ? "ACTION_SUCCESS" : "ACTION_FAILURE";
+                String severity = "SUCCESS".equalsIgnoreCase(status) ? "INFO" : "WARNING";
+                String eventData = String.format("{\"service\":\"%s\",\"action\":\"%s\",\"resource\":\"%s\",\"details\":\"%s\",\"correlationId\":\"%s\"}", 
+                    service, action, resource != null ? resource : "", details != null ? details : "", correlationId != null ? correlationId : "");
                 
                 realTimeDbService.recordEvent(eventType, service, 
                     userId != null ? userId.toString() : null, accountId, 
@@ -83,11 +87,21 @@ public class AuditService {
         recordAction(username, service, action, resource, "FAILURE", error);
     }
 
+    public List<AuditLog> getLogsForAccount(String accountId) {
+        return auditLogRepository.findByAccountIdOrderByTimestampDesc(accountId);
+    }
+
     public List<AuditLog> getLogsForUser(String username) {
         return auditLogRepository.findAllByUsername(username);
     }
 
     public List<AuditLog> getRecentLogs() {
+        try {
+            UserPrincipal principal = SecurityUtils.getAuthenticatedPrincipal();
+            if (principal.getAccountId() != null && !principal.isRoot()) {
+                return auditLogRepository.findByAccountIdOrderByTimestampDesc(principal.getAccountId());
+            }
+        } catch (Exception ignored) {}
         return auditLogRepository.findTop100ByOrderByTimestampDesc();
     }
 }

@@ -35,6 +35,17 @@ public class Bucket {
     private Integer retentionDays;
     private boolean spaMode;
 
+    @Builder.Default
+    private long totalSizeBytes = 0;
+
+    @Builder.Default
+    private long objectCount = 0;
+
+    private LocalDateTime lastAccessed;
+
+    @Version
+    private Long version;
+
     @CreatedDate
     private LocalDateTime createdAt;
 }

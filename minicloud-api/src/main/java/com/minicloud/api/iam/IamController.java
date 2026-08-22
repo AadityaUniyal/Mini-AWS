@@ -1,19 +1,19 @@
 package com.minicloud.api.iam;
 
-import com.minicloud.api.dto.AccessKeyResponse;
-import com.minicloud.api.dto.ApiResponse;
-import com.minicloud.api.dto.PolicyResponse;
-import com.minicloud.api.dto.UserResponse;
+import com.minicloud.api.dto.*;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
+import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 
 @RestController
@@ -28,10 +28,19 @@ public class IamController {
     // ── Users ──────────────────────────────────────────────────────────────────
 
     @GetMapping("/users")
-    @PreAuthorize("hasRole('ADMIN')")
-    @Operation(summary = "List all users (ADMIN only)")
+    @PreAuthorize("hasAnyRole('ADMIN', 'USER')")
+    @Operation(summary = "List all IAM users in the current account")
     public ResponseEntity<ApiResponse<List<UserResponse>>> listUsers() {
         return ResponseEntity.ok(ApiResponse.ok(iamService.listAllUsers()));
+    }
+
+    @PostMapping("/users")
+    @PreAuthorize("hasRole('ADMIN')")
+    @Operation(summary = "Create a child IAM user in the current account")
+    public ResponseEntity<ApiResponse<UserResponse>> createIamUser(@Valid @RequestBody CreateIamUserRequest request) {
+        UserResponse response = iamService.createIamUser(request);
+        return ResponseEntity.status(HttpStatus.CREATED)
+                .body(ApiResponse.ok("IAM user created successfully", response));
     }
 
     @GetMapping("/users/{identifier}")
@@ -46,14 +55,14 @@ public class IamController {
     }
 
     @GetMapping("/me")
-    @Operation(summary = "Get current user profile with attached policies")
+    @Operation(summary = "Get current authenticated user profile with attached policies")
     public ResponseEntity<ApiResponse<UserResponse>> getCurrentUser(Authentication auth) {
         return ResponseEntity.ok(ApiResponse.ok(iamService.getUserByUsername(auth.getName())));
     }
 
     @DeleteMapping("/users/by-username/{username}")
     @PreAuthorize("hasRole('ADMIN')")
-    @Operation(summary = "Delete a user by username (ADMIN only)")
+    @Operation(summary = "Delete an IAM user by username (ADMIN only)")
     public ResponseEntity<ApiResponse<String>> deleteUserByUsername(@PathVariable String username) {
         UserResponse user = iamService.getUserByUsername(username);
         iamService.deleteUser(UUID.fromString(user.getId()));
@@ -62,7 +71,7 @@ public class IamController {
 
     @DeleteMapping("/users/{id}")
     @PreAuthorize("hasRole('ADMIN')")
-    @Operation(summary = "Delete a user (ADMIN only — cannot delete last admin)")
+    @Operation(summary = "Delete an IAM user by ID (ADMIN only)")
     public ResponseEntity<ApiResponse<String>> deleteUser(@PathVariable UUID id) {
         iamService.deleteUser(id);
         return ResponseEntity.ok(ApiResponse.ok("User deleted", id.toString()));
@@ -99,7 +108,7 @@ public class IamController {
     @Operation(summary = "Update a user's inline JSON policy")
     public ResponseEntity<ApiResponse<Void>> updatePolicy(
             @PathVariable String username,
-            @RequestBody java.util.Map<String, String> body) {
+            @RequestBody Map<String, String> body) {
         iamService.updateInlinePolicy(username, body.get("document"));
         return ResponseEntity.ok(ApiResponse.ok("Policy updated", null));
     }
@@ -107,13 +116,14 @@ public class IamController {
     // ── Access Keys ────────────────────────────────────────────────────────────
 
     @PostMapping("/access-keys")
-    @Operation(summary = "Generate a new access key pair for current user (secret returned ONCE)")
+    @Operation(summary = "Generate a new access key pair for current user")
     public ResponseEntity<ApiResponse<AccessKeyResponse>> generateAccessKey(Authentication auth) {
         AccessKeyResponse response = iamService.generateAccessKey(auth.getName());
         return ResponseEntity.ok(ApiResponse.ok("Access key generated — store secret safely, it won't be shown again", response));
     }
 
     @PostMapping("/users/{username}/access-keys")
+    @PreAuthorize("hasRole('ADMIN')")
     @Operation(summary = "Generate a new access key pair for a specific user (ADMIN)")
     public ResponseEntity<ApiResponse<AccessKeyResponse>> generateAccessKeyForUser(@PathVariable String username) {
         AccessKeyResponse response = iamService.generateAccessKey(username);
@@ -127,6 +137,7 @@ public class IamController {
     }
 
     @GetMapping("/users/{username}/access-keys")
+    @PreAuthorize("hasRole('ADMIN')")
     @Operation(summary = "List access keys for a specific user (ADMIN)")
     public ResponseEntity<ApiResponse<List<AccessKeyResponse>>> listAccessKeysForUser(@PathVariable String username) {
         return ResponseEntity.ok(ApiResponse.ok(iamService.listAccessKeys(username)));

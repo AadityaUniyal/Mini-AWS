@@ -1,7 +1,7 @@
 @echo off
 REM ============================================================
-REM  MiniCloud Desktop Application Launcher (Neon PostgreSQL)
-REM  Pure Java Swing Desktop - No local MySQL Required
+REM  MiniCloud Desktop Application Launcher
+REM  Pure Java Swing Desktop + Embedded API
 REM ============================================================
 
 echo.
@@ -19,24 +19,7 @@ if not exist "%JAVA_HOME%\bin\java.exe" (
     )
 )
 
-REM Build the project
-echo [1/2] Building project...
-call mvnw.cmd clean package -DskipTests -pl minicloud-api -am
-if errorlevel 1 (
-    echo [ERROR] Build failed!
-    pause
-    exit /b 1
-)
-echo [OK] Build successful
-
-REM Run the desktop application
-echo [2/2] Launching desktop application...
-echo.
-echo ========================================
-echo   Starting MiniCloud Desktop UI...
-echo ========================================
-echo.
-
-call mvnw.cmd spring-boot:run -pl minicloud-api -Dfile.encoding=UTF-8 --mode=DESKTOP
+echo Launching MiniCloud Desktop UI...
+call mvnw.cmd -pl minicloud-api spring-boot:run -Dfile.encoding=UTF-8 -Dspring-boot.run.arguments="--mode=DESKTOP"
 
 pause

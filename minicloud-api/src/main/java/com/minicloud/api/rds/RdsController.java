@@ -1,93 +1,112 @@
 package com.minicloud.api.rds;
 
+import com.minicloud.api.auth.SecurityUtils;
+import com.minicloud.api.auth.UserPrincipal;
+import com.minicloud.api.domain.Task;
 import com.minicloud.api.dto.ApiResponse;
+import com.minicloud.api.dto.RdsRequest;
 import com.minicloud.api.dto.RdsResponse;
-import com.minicloud.api.domain.RdsInstance;
-import com.minicloud.api.domain.RdsRepository;
+import com.minicloud.api.service.TaskService;
 import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
+import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
 import java.util.UUID;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 
+@Slf4j
 @RestController
-@RequestMapping("/api/v1/rds/instances")
+@RequestMapping("/api/v1/rds")
 @RequiredArgsConstructor
-@Tag(name = "MiniRDS", description = "Relational database as a service management")
+@Tag(name = "RDS Database", description = "Relational Database Service operations")
+@SecurityRequirement(name = "BearerAuth")
 public class RdsController {
 
     private final RdsService rdsService;
-    private final RdsRepository rdsRepository;
+    private final TaskService taskService;
+    private final ExecutorService asyncRdsExecutor = Executors.newFixedThreadPool(4);
 
-    @GetMapping
-    @Operation(summary = "List all RDS instances (admin view)")
+    @GetMapping({"", "/instances"})
+    @Operation(summary = "List all RDS database instances for current account")
     public ResponseEntity<ApiResponse<List<RdsResponse>>> listAll() {
-        return ResponseEntity.ok(ApiResponse.ok(rdsService.listAll()));
+        UserPrincipal principal = SecurityUtils.getAuthenticatedPrincipal();
+        if (principal.getAccountId() != null) {
+            return ResponseEntity.ok(ApiResponse.ok(rdsService.listInstancesForAccount(principal.getAccountId())));
+        }
+        return ResponseEntity.ok(ApiResponse.ok(rdsService.listInstances(principal.getUserId())));
     }
 
-    @PostMapping
-    @Operation(summary = "Create a new RDS instance (JSON body)")
-    public ResponseEntity<ApiResponse<RdsResponse>> create(@RequestParam(required = false) UUID userId, @jakarta.validation.Valid @RequestBody com.minicloud.api.dto.RdsRequest req) {
-        String name = req.getName();
-        String dbName = req.getDatabaseName() != null ? req.getDatabaseName() : name;
-        String masterUsername = req.getMasterUsername() != null ? req.getMasterUsername() : "admin";
-        String masterPassword = req.getMasterPassword() != null ? req.getMasterPassword() : "password";
-        RdsResponse response = rdsService.launchInstance(userId, name, dbName, masterUsername, masterPassword, null);
-        return ResponseEntity.status(HttpStatus.CREATED).body(ApiResponse.ok("Database created", response));
-    }
-
-    @GetMapping("/user/{userId}")
-    public ResponseEntity<ApiResponse<List<RdsResponse>>> listInstances(@PathVariable UUID userId) {
+    @GetMapping({"/user/{userId}", "/instances/user/{userId}"})
+    @Operation(summary = "List RDS instances by user ID")
+    public ResponseEntity<ApiResponse<List<RdsResponse>>> list(@PathVariable UUID userId) {
         return ResponseEntity.ok(ApiResponse.ok(rdsService.listInstances(userId)));
     }
 
-    @PostMapping("/launch")
-    @Operation(summary = "Launch a new RDS instance")
-    public ResponseEntity<ApiResponse<RdsResponse>> launchInstance(
-            @RequestParam UUID userId,
-            @RequestParam String name,
-            @RequestParam String dbName,
-            @RequestParam String masterUsername,
-            @RequestParam String masterPassword,
-            @RequestParam(required = false) UUID securityGroupId) {
-        
-        RdsResponse response = rdsService.launchInstance(userId, name, dbName, masterUsername, masterPassword, securityGroupId);
-        return ResponseEntity.status(HttpStatus.CREATED).body(ApiResponse.ok("Database instance launch initiated", response));
+    @PostMapping
+    @Operation(summary = "Launch a new RDS database instance")
+    public ResponseEntity<ApiResponse<Task>> launch(
+            @RequestParam(required = false) UUID userId,
+            @Valid @RequestBody RdsRequest request) {
+
+        UserPrincipal principal = SecurityUtils.getAuthenticatedPrincipal();
+        UUID effectiveUserId = principal.getUserId() != null ? principal.getUserId() : userId;
+        String effectiveAccountId = principal.getAccountId();
+
+        Task task = taskService.createTask("RDS_LAUNCH", "Creating RDS database instance: " + request.getName(), effectiveUserId, effectiveAccountId);
+
+        CompletableFuture<Void> future = CompletableFuture.runAsync(() -> {
+            try {
+                taskService.updateProgress(task.getId(), 20, "RUNNING", null);
+                
+                UUID sgId = request.getSecurityGroupId() != null ? UUID.fromString(request.getSecurityGroupId()) : null;
+                rdsService.launchInstance(
+                        effectiveUserId,
+                        effectiveAccountId,
+                        request.getName(),
+                        request.getDatabaseName() != null ? request.getDatabaseName() : "minidb",
+                        request.getMasterUsername(),
+                        request.getMasterPassword(),
+                        sgId
+                );
+
+                taskService.updateProgress(task.getId(), 100, "COMPLETED", null);
+            } catch (Exception e) {
+                log.error("Asynchronous RDS creation failed", e);
+                taskService.updateProgress(task.getId(), 100, "FAILED", e.getMessage());
+            }
+        }, asyncRdsExecutor);
+
+        taskService.registerActiveFuture(task.getId(), future);
+
+        return ResponseEntity.status(HttpStatus.ACCEPTED)
+                .body(ApiResponse.ok("RDS launch sequence started", task));
     }
 
-    @PostMapping("/{idOrName}/start")
-    @org.springframework.security.access.prepost.PreAuthorize("isAuthenticated()")
-    public ResponseEntity<ApiResponse<RdsResponse>> startInstance(@PathVariable String idOrName) {
-        UUID id = resolveId(idOrName);
-        return ResponseEntity.ok(ApiResponse.ok("Database starting", rdsService.startInstance(id)));
+    @PostMapping("/{id}/stop")
+    @Operation(summary = "Stop a running RDS database instance")
+    public ResponseEntity<ApiResponse<RdsResponse>> stop(@PathVariable UUID id) {
+        return ResponseEntity.ok(ApiResponse.ok("Stopped", rdsService.stopInstance(id)));
     }
 
-    @PostMapping("/{idOrName}/stop")
-    @org.springframework.security.access.prepost.PreAuthorize("isAuthenticated()")
-    public ResponseEntity<ApiResponse<RdsResponse>> stopInstance(@PathVariable String idOrName) {
-        UUID id = resolveId(idOrName);
-        return ResponseEntity.ok(ApiResponse.ok("Database stopping", rdsService.stopInstance(id)));
+    @PostMapping("/{id}/start")
+    @Operation(summary = "Start a stopped RDS database instance")
+    public ResponseEntity<ApiResponse<RdsResponse>> start(@PathVariable UUID id) {
+        return ResponseEntity.ok(ApiResponse.ok("Started", rdsService.startInstance(id)));
     }
 
-    @DeleteMapping("/{idOrName}")
-    @org.springframework.security.access.prepost.PreAuthorize("isAuthenticated()")
-    public ResponseEntity<ApiResponse<String>> terminateInstance(@PathVariable String idOrName) {
-        UUID id = resolveId(idOrName);
+    @DeleteMapping("/{id}")
+    @Operation(summary = "Terminate an RDS database instance")
+    public ResponseEntity<ApiResponse<String>> terminate(@PathVariable UUID id) {
         rdsService.terminateInstance(id);
-        return ResponseEntity.ok(ApiResponse.ok("Database terminated", id.toString()));
-    }
-
-    private UUID resolveId(String idOrName) {
-        try {
-            return UUID.fromString(idOrName);
-        } catch (IllegalArgumentException e) {
-            RdsInstance instance = rdsRepository.findByName(idOrName)
-                    .orElseThrow(() -> new RuntimeException("RDS Database not found: " + idOrName));
-            return instance.getId();
-        }
+        return ResponseEntity.ok(ApiResponse.ok("Terminated", id.toString()));
     }
 }

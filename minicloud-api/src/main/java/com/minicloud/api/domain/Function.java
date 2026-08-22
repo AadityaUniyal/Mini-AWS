@@ -3,13 +3,16 @@ package com.minicloud.api.domain;
 import jakarta.persistence.*;
 import lombok.*;
 import org.springframework.data.annotation.CreatedDate;
+import org.springframework.data.annotation.LastModifiedDate;
 import org.springframework.data.jpa.domain.support.AuditingEntityListener;
 
 import java.time.LocalDateTime;
 import java.util.UUID;
 
 @Entity
-@Table(name = "lambda_functions")
+@Table(name = "lambda_functions", uniqueConstraints = {
+    @UniqueConstraint(name = "uq_func_account_name", columnNames = {"account_id", "function_name"})
+})
 @Data
 @Builder
 @NoArgsConstructor
@@ -21,11 +24,13 @@ public class Function {
     @GeneratedValue(strategy = GenerationType.UUID)
     private UUID id;
 
-    @Column(name = "function_name", unique = true, nullable = false)
+    @Column(name = "function_name", nullable = false)
     private String name;
 
     private String description;
     private UUID userId;
+    
+    @Column(name = "account_id")
     private String accountId;
 
     @Enumerated(EnumType.STRING)
@@ -41,8 +46,10 @@ public class Function {
     @Column(name = "s3_key")
     private String s3Key;       // Key of deployment artifact
 
-    private int memoryMb;       // Performance config
-    private int timeoutSec;     // Max execution time
+    @Builder.Default
+    private int memoryMb = 128;       // Performance config
+    @Builder.Default
+    private int timeoutSec = 30;     // Max execution time
 
     @Column(name = "environment_vars", columnDefinition = "TEXT")
     private String environmentConfig; // JSON map of env vars
@@ -51,11 +58,27 @@ public class Function {
     @Builder.Default
     private FunctionStatus status = FunctionStatus.ACTIVE;
 
+    @Builder.Default
+    private long totalDurationMs = 0;
+    @Builder.Default
+    private long errorCount = 0;
+    @Builder.Default
+    private double avgDurationMs = 0;
+
     @CreatedDate
     private LocalDateTime createdAt;
+    
+    @LastModifiedDate
+    private LocalDateTime updatedAt;
+    
     private LocalDateTime lastInvokedAt;
-    private long invocationCount;
-    private int lastExitCode;
+    @Builder.Default
+    private long invocationCount = 0;
+    @Builder.Default
+    private int lastExitCode = -1;
+
+    @Version
+    private Long version;
 
     public enum Runtime { JAVA, NODE, PYTHON, BASH, RUBY, GO, DOTNET }
     public enum FunctionStatus { ACTIVE, DISABLED, UPDATING, ERROR }

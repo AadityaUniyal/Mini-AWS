@@ -23,13 +23,16 @@ public class RdsInstance {
     @Column(name = "db_instance_identifier", unique = true, nullable = false)
     private String name;
     
-    private String engine;
+    @Builder.Default
+    private String engine = "h2";
     
     @Column(name = "instance_class")
-    private String instanceClass;
+    @Builder.Default
+    private String instanceClass = "db.t3.micro";
 
     @Column(name = "allocated_storage_gb")
-    private int allocatedStorageGb;
+    @Builder.Default
+    private int allocatedStorageGb = 20;
     
     private String dbName;
     private String masterUsername;
@@ -43,6 +46,17 @@ public class RdsInstance {
     private String accountId;
     private UUID subnetId;
     private UUID securityGroupId;
+
+    @Builder.Default
+    private double cpuUsage = 0;
+    @Builder.Default
+    private double memoryUsage = 0;
+    @Builder.Default
+    private int connectionsCount = 0;
+    private LocalDateTime lastBackup;
+
+    @Version
+    private Long version;
     
     @CreatedDate
     private LocalDateTime createdAt;

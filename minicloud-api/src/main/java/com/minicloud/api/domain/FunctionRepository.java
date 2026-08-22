@@ -10,7 +10,9 @@ import java.util.UUID;
 @Repository
 public interface FunctionRepository extends JpaRepository<Function, UUID> {
     Optional<Function> findByName(String name);
+    Optional<Function> findByAccountIdAndName(String accountId, String name);
     List<Function> findByUserId(UUID userId);
     List<Function> findByAccountId(String accountId);
     boolean existsByName(String name);
+    boolean existsByAccountIdAndName(String accountId, String name);
 }

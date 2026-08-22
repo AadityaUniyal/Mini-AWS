@@ -3,7 +3,7 @@ setlocal enabledelayedexpansion
 title MiniCloud -- Java Cloud Monolith
 echo ============================================================
 echo   MiniCloud -- Java Cloud Platform (Modular Monolith)
-echo   Neon PostgreSQL Database Connection Active
+echo   Local H2 Database (or PostgreSQL via --spring.profiles.active=postgres)
 echo ============================================================
 echo.
 

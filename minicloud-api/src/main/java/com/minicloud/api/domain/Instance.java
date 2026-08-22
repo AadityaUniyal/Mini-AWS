@@ -44,9 +44,29 @@ public class Instance {
     @Column(name = "process_id")
     private Long pid;
 
-    private int cpuCores;
-    private int ramMb;
-    private int diskGb;
+    @Column(name = "container_id")
+    private String containerId;
+
+    @Builder.Default
+    private int cpuCores = 1;
+    @Builder.Default
+    private int ramMb = 1024;
+    @Builder.Default
+    private int diskGb = 10;
+
+    @Builder.Default
+    private double cpuUsage = 0;
+    @Builder.Default
+    private double memoryUsage = 0;
+    @Builder.Default
+    private long networkIn = 0;
+    @Builder.Default
+    private long networkOut = 0;
+
+    private LocalDateTime lastHeartbeat;
+
+    @Version
+    private Long version;
     
     private LocalDateTime launchedAt;
     

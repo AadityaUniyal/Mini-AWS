@@ -2,6 +2,9 @@ package com.minicloud.api.domain;
 
 import jakarta.persistence.*;
 import lombok.*;
+import org.springframework.data.annotation.CreatedDate;
+import org.springframework.data.annotation.LastModifiedDate;
+import org.springframework.data.jpa.domain.support.AuditingEntityListener;
 
 import java.time.LocalDateTime;
 import java.util.UUID;
@@ -12,6 +15,7 @@ import java.util.UUID;
 @Builder
 @NoArgsConstructor
 @AllArgsConstructor
+@EntityListeners(AuditingEntityListener.class)
 public class Route {
     @Id
     @GeneratedValue(strategy = GenerationType.UUID)
@@ -33,9 +37,17 @@ public class Route {
     private long requestCount;
     
     private UUID userId;
+    private String accountId;
+    
     @Column(name = "ec2_instance_id")
     private UUID ec2InstanceId;
     
+    @Version
+    private Long version;
+
+    @CreatedDate
     private LocalDateTime createdAt;
+    
+    @LastModifiedDate
     private LocalDateTime updatedAt;
 }

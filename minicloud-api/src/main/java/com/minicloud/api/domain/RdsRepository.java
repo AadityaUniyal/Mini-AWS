@@ -11,6 +11,8 @@ import java.util.UUID;
 public interface RdsRepository extends JpaRepository<RdsInstance, UUID> {
     Optional<RdsInstance> findByName(String name);
     Optional<RdsInstance> findByPort(int port);
+    Optional<RdsInstance> findByIdAndAccountId(UUID id, String accountId);
+    Optional<RdsInstance> findByAccountIdAndName(String accountId, String name);
     List<RdsInstance> findByUserId(UUID userId);
     List<RdsInstance> findByAccountId(String accountId);
 }

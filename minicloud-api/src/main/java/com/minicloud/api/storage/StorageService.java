@@ -17,39 +17,65 @@ public class StorageService {
     @Value("${minicloud.storage.base-path:./minicloud-data/s3}")
     private String basePath;
 
+    private Path storageRoot;
+
     @PostConstruct
     public void init() {
         try {
-            Files.createDirectories(Path.of(basePath));
-            // Also ensure the legacy s3 dir exists for backward compat
-            Files.createDirectories(Path.of("./minicloud-data/s3"));
-            log.info("Storage base path ready: {}", Path.of(basePath).toAbsolutePath());
+            storageRoot = Path.of(basePath).toAbsolutePath().normalize();
+            Files.createDirectories(storageRoot);
+            Files.createDirectories(Path.of("./minicloud-data/s3").toAbsolutePath().normalize());
+            log.info("Storage base path ready: {}", storageRoot);
         } catch (IOException e) {
             log.error("Failed to create base storage directory: {}", e.getMessage());
         }
     }
 
+    private Path resolveSafePath(String... components) {
+        Path resolved = storageRoot;
+        for (String c : components) {
+            resolved = resolved.resolve(c);
+        }
+        resolved = resolved.normalize();
+        if (!resolved.startsWith(storageRoot)) {
+            throw new SecurityException("Access denied: Path traversal attempted (" + resolved + ")");
+        }
+        return resolved;
+    }
+
+    public void createBucketDirectory(String accountId, String bucketName) throws IOException {
+        Path path = resolveSafePath(accountId != null ? accountId : "default", bucketName);
+        Files.createDirectories(path);
+        log.info("Created bucket directory: {}", path);
+    }
+
     public void createBucketDirectory(UUID userId, String bucketName) throws IOException {
-        Path path = Path.of(basePath, userId.toString(), bucketName).toAbsolutePath().normalize();
+        Path path = resolveSafePath(userId != null ? userId.toString() : "default", bucketName);
         Files.createDirectories(path);
         log.info("Created bucket directory: {}", path);
     }
 
     public void deleteBucketDirectory(UUID userId, String bucketName) {
-        Path path = Path.of(basePath, userId.toString(), bucketName).toAbsolutePath().normalize();
+        Path path = resolveSafePath(userId != null ? userId.toString() : "default", bucketName);
+        deleteRecursive(path.toFile());
+        log.info("Deleted bucket directory: {}", path);
+    }
+
+    public void deleteBucketDirectory(String accountId, String bucketName) {
+        Path path = resolveSafePath(accountId != null ? accountId : "default", bucketName);
         deleteRecursive(path.toFile());
         log.info("Deleted bucket directory: {}", path);
     }
 
     public String writeObject(UUID userId, String bucketName, String objectKey, InputStream content) throws IOException {
-        Path dir = Path.of(basePath, userId.toString(), bucketName).toAbsolutePath().normalize();
+        String owner = userId != null ? userId.toString() : "default";
+        Path dir = resolveSafePath(owner, bucketName);
         Files.createDirectories(dir);
 
         Path filePath = dir.resolve(objectKey).normalize();
         if (!filePath.startsWith(dir)) {
-            throw new IllegalArgumentException("Invalid object key: path traversal detected");
+            throw new SecurityException("Invalid object key: path traversal detected");
         }
-        // Ensure parent directories for nested keys (e.g. folder/file.txt)
         if (filePath.getParent() != null) {
             Files.createDirectories(filePath.getParent());
         }
@@ -60,9 +86,21 @@ public class StorageService {
     }
 
     public byte[] readObjectFromDisk(String localPath) throws IOException {
-        try (InputStream is = new FileInputStream(localPath)) {
+        Path path = Path.of(localPath).toAbsolutePath().normalize();
+        if (!path.startsWith(storageRoot)) {
+            throw new SecurityException("Invalid path: access outside storage root");
+        }
+        try (InputStream is = new FileInputStream(path.toFile())) {
             return is.readAllBytes();
         }
+    }
+
+    public InputStream openObjectStream(String localPath) throws IOException {
+        Path path = Path.of(localPath).toAbsolutePath().normalize();
+        if (!path.startsWith(storageRoot)) {
+            throw new SecurityException("Invalid path: access outside storage root");
+        }
+        return new BufferedInputStream(new FileInputStream(path.toFile()));
     }
 
     public InputStream readObject(byte[] content) {
@@ -72,7 +110,10 @@ public class StorageService {
     public void deleteObject(String localPath) {
         if (localPath != null) {
             try {
-                Files.deleteIfExists(Path.of(localPath));
+                Path path = Path.of(localPath).toAbsolutePath().normalize();
+                if (path.startsWith(storageRoot)) {
+                    Files.deleteIfExists(path);
+                }
             } catch (IOException e) {
                 log.warn("Failed to delete local file: {}", localPath);
             }
@@ -80,7 +121,15 @@ public class StorageService {
     }
 
     public boolean isBucketEmpty(UUID userId, String bucketName) {
-        Path path = Path.of(basePath, userId.toString(), bucketName).toAbsolutePath().normalize();
+        Path path = resolveSafePath(userId != null ? userId.toString() : "default", bucketName);
+        File dir = path.toFile();
+        if (!dir.exists()) return true;
+        String[] children = dir.list();
+        return children == null || children.length == 0;
+    }
+
+    public boolean isBucketEmpty(String accountId, String bucketName) {
+        Path path = resolveSafePath(accountId != null ? accountId : "default", bucketName);
         File dir = path.toFile();
         if (!dir.exists()) return true;
         String[] children = dir.list();

@@ -2,6 +2,8 @@ package com.minicloud.api.domain;
 
 import jakarta.persistence.*;
 import lombok.*;
+import org.springframework.data.annotation.CreatedDate;
+import org.springframework.data.jpa.domain.support.AuditingEntityListener;
 
 import java.time.LocalDateTime;
 import java.util.UUID;
@@ -12,6 +14,7 @@ import java.util.UUID;
 @Builder
 @NoArgsConstructor
 @AllArgsConstructor
+@EntityListeners(AuditingEntityListener.class)
 public class AuditLog {
     @Id
     @GeneratedValue(strategy = GenerationType.UUID)
@@ -23,7 +26,10 @@ public class AuditLog {
     private String resource;
     private String status;
     private String details;
-    
     private UUID userId;
+    private String accountId;
+    private String correlationId;
+
+    @CreatedDate
     private LocalDateTime timestamp;
 }
