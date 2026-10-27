@@ -181,9 +181,9 @@ Mini-AWS/
 
 ### Option 1: Java Swing Desktop UI Mode (Recommended)
 
-Run the desktop launcher:
+Run the interactive launcher in desktop mode:
 ```powershell
-.\start-desktop.bat
+.\start.bat desktop
 ```
 *Launches the Spring Boot backend and pops up the AWS-styled Swing Desktop Management Console.*
 
@@ -254,6 +254,12 @@ minicloud billing recommendations
 | **Billing** | `GET` | `/api/v1/billing/summary` | Get aggregated account cost ledger |
 | **Billing** | `GET` | `/api/v1/billing/recommendations` | Get telemetry rightsizing advice |
 | **Chaos** | `POST` | `/api/v1/chaos/terminate-random-instance` | Inject random instance termination |
+| **S3 Wire** | `GET/PUT` | `/s3/{bucket}/{key}` | AWS S3 REST/XML wire protocol with RFC 7233 range stream |
+| **Messaging** | `POST` | `/api/v1/messaging/sqs/queues` | Create SQS queue (standard, FIFO, or lock-free ring buffer) |
+| **Messaging** | `POST` | `/api/v1/messaging/sns/topics/{name}/publish` | Publish SNS message with automatic SQS/webhook fan-out |
+| **Topology** | `GET` | `/api/v1/architecture/diagram` | Generate live Mermaid infrastructure topology diagram |
+| **FinOps** | `GET` | `/api/v1/billing/export` | Export Cost & Usage Report (CUR) in CSV or JSON |
+| **Benchmark** | `GET` | `/api/v1/billing/benchmark` | Execute reproducible local system performance benchmark |
 | **Health** | `GET` | `/actuator/health` | Service health & component probes |
 
 ---
