@@ -227,14 +227,20 @@ public class RealTimeDbService {
             String sql = """
                 INSERT INTO event_stream (
                     id, event_type, source_service, user_id, account_id,
-                    resource_type, resource_id, event_data, severity, timestamp
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    resource_type, resource_id, event_data, severity, timestamp, processed
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """;
             
+            UUID id = UUID.randomUUID();
+            UUID userUuid = null;
+            try { if (userId != null) userUuid = UUID.fromString(userId); } catch (Exception ignored) {}
+            UUID resUuid = null;
+            try { if (resourceId != null) resUuid = UUID.fromString(resourceId); } catch (Exception ignored) {}
+
             jdbcTemplate.update(sql,
-                UUID.randomUUID().toString(),
-                eventType, sourceService, userId, accountId,
-                resourceType, resourceId, eventData, severity, LocalDateTime.now()
+                id,
+                eventType, sourceService, userUuid, accountId,
+                resourceType, resUuid, eventData, severity, LocalDateTime.now(), false
             );
             
         } catch (Exception e) {

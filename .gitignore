@@ -6,18 +6,29 @@ target/
 *.war
 *.ear
 
+# ── Code Coverage & Reports ───────────────────────────────────
+jacoco.exec
+*.exec
+target/site/jacoco/
+.coverage
+htmlcov/
+
 # ── Runtime data (never commit) ───────────────────────────────
 minicloud-data/
 **/minicloud-data/**
+!minicloud-api/minicloud-data/**/.gitkeep
 *.mv.db
 *.trace.db
 *.lock.db
+test-storage/
+test-lambda-tmp/
 
 # ── Logs ──────────────────────────────────────────────────────
 *.log
 /logs/
+**/logs/
 
-# ── IDEs ──────────────────────────────────────────────────────
+# ── IDEs & Tooling ────────────────────────────────────────────
 .idea/
 *.iml
 .vscode/
@@ -26,10 +37,22 @@ minicloud-data/
 .settings/
 *.swp
 *.swo
+.history/
+
+# ── AI Agents & Temporary Artifacts ───────────────────────────
+.gemini/
+.antigravity/
+.claude/
+.copilot/
+scratch/
+*.tmp
+*.bak
 
 # ── OS junk ───────────────────────────────────────────────────
 .DS_Store
 Thumbs.db
+desktop.ini
+ehthumbs.db
 
 # ── Spring Boot devtools restart file ─────────────────────────
 .reloadtrigger
@@ -38,6 +61,8 @@ Thumbs.db
 /config/
 application-local.properties
 application-local.yml
+.env
+.env.local
 
 # ── Python / CLI ──────────────────────────────────────────────
 __pycache__/
@@ -45,8 +70,6 @@ __pycache__/
 *$py.class
 *.egg-info/
 .pytest_cache/
-.coverage
-htmlcov/
 .venv/
 venv/
 ENV/

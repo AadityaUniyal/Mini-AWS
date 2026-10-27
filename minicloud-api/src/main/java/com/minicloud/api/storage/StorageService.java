@@ -103,6 +103,36 @@ public class StorageService {
         return new BufferedInputStream(new FileInputStream(path.toFile()));
     }
 
+    /**
+     * Opens a byte-range stream for RFC 7233 partial content / HTTP 206 streaming without full heap buffering.
+     */
+    public InputStream openObjectRangeStream(String localPath, long start, long length) throws IOException {
+        Path path = Path.of(localPath).toAbsolutePath().normalize();
+        if (!path.startsWith(storageRoot)) {
+            throw new SecurityException("Invalid path: access outside storage root");
+        }
+        FileInputStream fis = new FileInputStream(path.toFile());
+        long skipped = fis.skip(start);
+        return new FilterInputStream(fis) {
+            private long remaining = length;
+            @Override
+            public int read() throws IOException {
+                if (remaining <= 0) return -1;
+                int b = super.read();
+                if (b != -1) remaining--;
+                return b;
+            }
+            @Override
+            public int read(byte[] b, int off, int len) throws IOException {
+                if (remaining <= 0) return -1;
+                int toRead = (int) Math.min(len, remaining);
+                int count = super.read(b, off, toRead);
+                if (count != -1) remaining -= count;
+                return count;
+            }
+        };
+    }
+
     public InputStream readObject(byte[] content) {
         return new ByteArrayInputStream(content);
     }

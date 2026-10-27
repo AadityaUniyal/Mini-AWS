@@ -42,7 +42,9 @@ public class SecurityConfig {
             "/actuator/**",
             "/site/**",        // MiniCDN: publicly accessible static sites
             "/lambda/invoke/**", // MiniLambda: public HTTP triggers
-            "/ws-events/**"    // WebSocket: real-time event streaming
+            "/ws-events/**",    // WebSocket: real-time event streaming
+            "/s3/**",          // AWS S3 Wire Protocol Compatibility
+            "/s3"
     };
 
     @Bean
